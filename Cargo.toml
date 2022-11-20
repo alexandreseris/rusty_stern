@@ -2,6 +2,9 @@
 name = "rusty_stern"
 version = "0.1.0"
 edition = "2021"
+description = "a rust implementation of stern (kubernetes)"
+authors = ["https://github.com/alexandreseris"]
+homepage = "https://github.com/alexandreseris/rusty_stern"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -12,3 +15,6 @@ k8s-openapi = { version = "0.16.0", features = ["v1_25"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 bytes = "1.2.1"
 futures = "0.3.17"
+regex = "1"
+colors-transform = "0.2.11"
+clap = { version = "4.0.26", features = ["derive"] }
