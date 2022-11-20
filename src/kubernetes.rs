@@ -27,7 +27,7 @@ pub async fn get_pods(pods_api: Api<Pod>, pod_search: Regex) -> Vec<Pod> {
 }
 
 pub async fn print_log(
-    stdout_lock: Arc<Mutex<StandardStream>>,
+    stdout_lock: Arc<Mutex<(StandardStream, StandardStream)>>,
     pods_api: Api<Pod>,
     name: String,
     color_rgb: ColorRGB,

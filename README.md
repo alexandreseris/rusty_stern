@@ -14,6 +14,10 @@ cargo +nightly build
 ```
 
 ## Usage
+_every option mentionned here can be used in a json utf8 config file (use long option name and snake case instead of kebab case) located in $HOME/rusty_stern/config_
+
+_command line arguments have priority over config file settings_
+
 ```
 Usage: rusty_stern [OPTIONS]
 
@@ -37,6 +41,5 @@ Options:
 
 ## Left to do
 - multiple namespace
-- read conf from file?
 - build and publish as release
 - documentation :3

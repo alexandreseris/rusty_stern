@@ -59,21 +59,48 @@ impl FromStr for ColorRGB {
 }
 
 pub async fn print_color(
-    stdout: Arc<Mutex<StandardStream>>,
+    stdout: Arc<Mutex<(StandardStream, StandardStream)>>,
     color_rgb: ColorRGB,
     message: String,
     newline: bool,
 ) {
     let mut stdout_locked = stdout.lock().await;
     stdout_locked
+        .0
         .set_color(ColorSpec::new().set_fg(Some(Color::Rgb(color_rgb.0, color_rgb.1, color_rgb.2))))
         .unwrap();
     if newline {
         stdout_locked
+            .0
             .write_fmt(format_args!("{}\n", message))
             .unwrap();
     } else {
         stdout_locked
+            .0
+            .write_fmt(format_args!("{}", message))
+            .unwrap();
+    }
+}
+
+pub async fn eprint_color(
+    stdout: Arc<Mutex<(StandardStream, StandardStream)>>,
+    color_rgb: ColorRGB,
+    message: String,
+    newline: bool,
+) {
+    let mut stdout_locked = stdout.lock().await;
+    stdout_locked
+        .1
+        .set_color(ColorSpec::new().set_fg(Some(Color::Rgb(color_rgb.0, color_rgb.1, color_rgb.2))))
+        .unwrap();
+    if newline {
+        stdout_locked
+            .1
+            .write_fmt(format_args!("{}\n", message))
+            .unwrap();
+    } else {
+        stdout_locked
+            .1
             .write_fmt(format_args!("{}", message))
             .unwrap();
     }
