@@ -2,13 +2,7 @@ use std::fmt;
 
 #[derive(Debug, Clone)]
 pub struct ColorRGBError {
-    message: String,
-}
-
-impl ColorRGBError {
-    pub fn new(message: String) -> ColorRGBError {
-        ColorRGBError { message }
-    }
+    pub message: String,
 }
 
 impl fmt::Display for ColorRGBError {
@@ -19,13 +13,7 @@ impl fmt::Display for ColorRGBError {
 
 #[derive(Debug, Clone)]
 pub struct ColorCycleError {
-    message: String,
-}
-
-impl ColorCycleError {
-    pub fn new(message: String) -> ColorCycleError {
-        ColorCycleError { message }
-    }
+    pub message: String,
 }
 
 impl fmt::Display for ColorCycleError {
@@ -36,13 +24,7 @@ impl fmt::Display for ColorCycleError {
 
 #[derive(Debug, Clone)]
 pub struct LogError {
-    message: String,
-}
-
-impl LogError {
-    pub fn new(message: String) -> LogError {
-        LogError { message }
-    }
+    pub message: String,
 }
 
 impl fmt::Display for LogError {
@@ -53,13 +35,7 @@ impl fmt::Display for LogError {
 
 #[derive(Debug, Clone)]
 pub struct GenericError {
-    message: String,
-}
-
-impl GenericError {
-    pub fn new(message: String) -> GenericError {
-        GenericError { message }
-    }
+    pub message: String,
 }
 
 impl fmt::Display for GenericError {

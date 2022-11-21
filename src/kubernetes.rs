@@ -48,30 +48,20 @@ pub async fn print_log(
     .await;
     let mut stream = match pods_api.log_stream(&name, &params).await {
         Ok(stream) => stream,
-        Err(err) => return Err(LogError::new(err.to_string())),
+        Err(err) => return Err(LogError { message: err.to_string() }),
     };
     let mut line_bytes: Bytes;
     loop {
-        line_bytes = stream
-            .next()
-            .await
-            .unwrap_or(Ok(Bytes::from("")))
-            .unwrap_or(Bytes::from(""));
+        line_bytes = stream.next().await.unwrap_or(Ok(Bytes::from(""))).unwrap_or(Bytes::from(""));
         if line_bytes == Bytes::from("") {
             break;
         }
         let content = match str::from_utf8(line_bytes.iter().as_slice()) {
             Ok(content) => content,
-            Err(err) => return Err(LogError::new(err.to_string())),
+            Err(err) => return Err(LogError { message: err.to_string() }),
         };
         let padding = " ".repeat(get_padding(running_pods.clone()).await - name.len());
-        print_color(
-            stdout_lock.clone(),
-            color_rgb,
-            format!("{}:{} {}", name, padding, content),
-            false,
-        )
-        .await;
+        print_color(stdout_lock.clone(), color_rgb, format!("{}:{} {}", name, padding, content), false).await;
     }
     let pod_count = {
         let mut running_pods_locked = running_pods.lock().await;

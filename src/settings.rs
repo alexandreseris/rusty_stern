@@ -1,12 +1,32 @@
 use std::fs;
+use std::path::PathBuf;
 
 use clap::Parser;
 use home;
 use serde::{Deserialize, Serialize};
-use serde_json::Error;
+use serde_json::{to_string, Error};
 
 use crate::display::ColorRGB;
 use crate::error::GenericError;
+
+fn get_config_file_path() -> Result<PathBuf, GenericError> {
+    let home_dir = home::home_dir();
+    if home_dir.is_some() {
+        let conf_file = home_dir.unwrap().join(".rusty_stern").join("config");
+        return Ok(conf_file);
+    } else {
+        return Err(GenericError {
+            message: "home directory is not available".to_string(),
+        });
+    }
+}
+
+pub fn create_default_config_file() -> Result<(), GenericError> {
+    let conf_file = get_config_file_path()?;
+    let def_settings = Settings { ..Default::default() };
+    fs::write(conf_file, to_string(&def_settings).unwrap().as_bytes()).unwrap();
+    Ok(())
+}
 
 #[derive(Parser, Debug, Serialize, Deserialize, Clone)]
 #[command(author, version, about, long_about = None)]
@@ -67,6 +87,11 @@ pub struct Settings {
     #[arg(long, value_name = "light", default_value_t = 50)]
     #[serde(default)]
     pub color_lightness: u8,
+
+    /// generate a default config file and exit
+    #[arg(long, default_value_t = false)]
+    #[serde(default)]
+    pub generate_config_file: bool,
 }
 
 impl Default for Settings {
@@ -86,6 +111,7 @@ impl Default for Settings {
             color_cycle_len: 0,
             color_saturation: 100,
             color_lightness: 50,
+            generate_config_file: false,
         }
     }
 }
@@ -96,49 +122,35 @@ impl Settings {
     }
 
     pub fn get_debug_color(self) -> Result<ColorRGB, GenericError> {
-        let res: Result<ColorRGB, GenericError> =
-            match self.debug_color.as_str().parse::<ColorRGB>() {
-                Ok(debug_color) => Ok(debug_color),
-                Err(err) => Err(GenericError::new(err.to_string())),
-            };
+        let res: Result<ColorRGB, GenericError> = match self.debug_color.as_str().parse::<ColorRGB>() {
+            Ok(debug_color) => Ok(debug_color),
+            Err(err) => Err(GenericError { message: err.to_string() }),
+        };
         res
     }
 
     pub fn from_config_file() -> Result<Settings, GenericError> {
-        let home_dir = home::home_dir();
-        if home_dir.is_some() {
-            let conf_file = home_dir.unwrap().join(".rusty_stern").join("config");
-            if conf_file.exists() {
-                let file_content = fs::read_to_string(conf_file.clone());
-                if file_content.is_err() {
-                    let err = file_content.unwrap_err();
-                    return Err(GenericError::new(format!(
-                        "failled to read config file {}: {}",
-                        conf_file.display(),
-                        err
-                    )));
-                }
-                let settings: Result<Settings, Error> =
-                    serde_json::from_str(file_content.unwrap().as_str());
-                if settings.is_err() {
-                    let err = settings.unwrap_err();
-                    return Err(GenericError::new(format!(
-                        "failled to parse config file {}: {}",
-                        conf_file.display(),
-                        err
-                    )));
-                }
-                return Ok(settings.unwrap());
-            } else {
-                return Err(GenericError::new(format!(
-                    "config file {} does not exists",
-                    conf_file.display()
-                )));
+        let conf_file = get_config_file_path()?;
+        if conf_file.exists() {
+            let file_content = fs::read_to_string(conf_file.clone());
+            if file_content.is_err() {
+                let err = file_content.unwrap_err();
+                return Err(GenericError {
+                    message: format!("failled to read config file {}: {}", conf_file.display(), err),
+                });
             }
+            let settings: Result<Settings, Error> = serde_json::from_str(file_content.unwrap().as_str());
+            if settings.is_err() {
+                let err = settings.unwrap_err();
+                return Err(GenericError {
+                    message: format!("failled to parse config file {}: {}", conf_file.display(), err),
+                });
+            }
+            return Ok(settings.unwrap());
         } else {
-            return Err(GenericError::new(
-                "home directory is not available".to_string(),
-            ));
+            return Err(GenericError {
+                message: format!("config file {} does not exists", conf_file.display()),
+            });
         }
     }
 
