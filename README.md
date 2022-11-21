@@ -10,7 +10,28 @@ Rust implementation of https://github.com/stern/stern
 
 ## Build
 ```sh
+# debug
 cargo +nightly build
+
+# get target architecture installed:
+rustup target list --installed
+# list all target
+rustc --print target-list
+# add a target
+rustup target add targetname --toolchain nightly
+
+# build dependencies
+## Linux
+libssl-dev
+## Windows
+about 1 millions things
+
+# build for linux 64
+cargo +nightly build --bin rusty_stern --release --target x86_64-unknown-linux-gnu
+# build for windows 64
+cargo +nightly build --bin rusty_stern --release --target x86_64-pc-windows-gnu
+### infinite pain, check https://docs.rs/openssl/latest/openssl/#automatic
+### or maybe https://docs.rs/crate/openssl/0.2.6
 ```
 
 ## Usage
@@ -41,5 +62,6 @@ Options:
 
 ## Left to do
 - multiple namespace
-- build and publish as release
+- build (for windows) and publish as release
+- proper error handling :O
 - documentation :3
