@@ -34,6 +34,20 @@ pub async fn get_pods(pods_api: Api<Pod>, pod_search: Regex) -> Result<Vec<Pod>,
     return Ok(filt_pods);
 }
 
+async fn is_pod_running(pods_api: Api<Pod>, pod_name: String) -> bool {
+    let status = pods_api.get_status(pod_name.as_str()).await;
+    match status {
+        Ok(val) => match val.status {
+            Some(val) => match val.phase {
+                Some(val) => val == "Running",
+                None => false,
+            },
+            None => false,
+        },
+        Err(_) => false,
+    }
+}
+
 pub async fn print_log(
     stdout_lock: Arc<Mutex<(StandardStream, StandardStream)>>,
     pods_api: Api<Pod>,
@@ -59,7 +73,7 @@ pub async fn print_log(
         Err(err) => return Err(Errors::LogError(err.to_string())),
     };
     let mut line_bytes: Bytes;
-    let error;
+    let mut error = None;
     loop {
         let next = match stream.next().await {
             Some(val) => val,
@@ -72,7 +86,12 @@ pub async fn print_log(
                 break;
             }
         };
-
+        if line_bytes == Bytes::from("") {
+            if is_pod_running(pods_api.clone(), name.clone()).await {
+                continue;
+            }
+            break;
+        }
         let content = match str::from_utf8(line_bytes.iter().as_slice()) {
             Ok(content) => content,
             Err(err) => return Err(Errors::LogError(err.to_string())),

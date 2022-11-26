@@ -127,10 +127,18 @@ pub fn build_color_cycle(
     hue_intervals: Vec<HueInterval>,
 ) -> Result<Cycle<std::vec::IntoIter<Rgb>>, Errors> {
     let mut colors: Vec<Rgb> = Vec::new();
-    let max_hue: u16 = 360;
-    let hue_step = max_hue / cycle_len as u16;
+    let mut hue_values: Vec<u16> = Vec::new();
+    for interval in hue_intervals {
+        for val in interval.start.value..interval.end.value + 1 {
+            hue_values.push(val);
+        }
+    }
+
+    let hue_count = hue_values.len();
+    let hue_step = hue_count as u16 / cycle_len as u16;
     for step in 0..cycle_len {
-        let current_hue = step as u16 * hue_step;
+        let current_hue_index = hue_step * step as u16;
+        let current_hue = hue_values[current_hue_index as usize];
         let rgb = Hsl::from(current_hue as f32, saturation.value as f32, lightness.value as f32).to_rgb();
         colors.push(rgb);
     }
