@@ -19,7 +19,7 @@ use rusty_stern_traits::Update;
 
 use display::{build_color_cycle, eprint_color, pick_color, print_color};
 use error::Errors;
-use kubernetes::{get_pods, print_log};
+use kubernetes::{get_pod_name, get_pod_status, get_pods, print_log};
 use settings::{create_default_config_file, Settings};
 
 #[tokio::main]
@@ -121,21 +121,12 @@ async fn main() -> Result<(), Errors> {
             eprint_color(stdout_lock.clone(), settings.debug_color, "no pod found :(".to_string(), true).await?;
         }
         for pod in pods.clone() {
-            let name = match pod.metadata.name {
-                Some(val) => val,
-                None => return Err(Errors::Kubernetes("pod has no name".to_string(), "(no details)".to_string())),
-            };
+            let name = get_pod_name(pod.clone())?;
             let pod_is_already_running = {
                 let running_pods_locked = running_pods_lock.lock().await;
                 running_pods_locked.contains(name.as_str())
             };
-            let phase = match pod.status {
-                Some(status) => match status.phase {
-                    Some(phase) => phase,
-                    None => return Err(Errors::Kubernetes(format!("pod {name} has no phase"), "(no details)".to_string())),
-                },
-                None => return Err(Errors::Kubernetes(format!("pod {name} has no status"), "(no details)".to_string())),
-            };
+            let phase = get_pod_status(pod)?;
             if !pod_is_already_running && phase == "Running".to_string() {
                 let pods_api_cp = pods_api.clone();
                 let name_cp = name.clone();

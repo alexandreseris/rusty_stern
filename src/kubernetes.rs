@@ -23,10 +23,7 @@ pub async fn get_pods(pods_api: Api<Pod>, pod_search: Regex) -> Result<Vec<Pod>,
     };
     for pod in pods {
         let cloned_pod = pod.clone();
-        let name = match pod.metadata.name {
-            Some(val) => val,
-            None => return Err(Errors::Kubernetes("pod has no name".to_string(), "(no details)".to_string())),
-        };
+        let name = get_pod_name(pod)?;
         if pod_search.is_match(name.as_str()) {
             filt_pods.push(cloned_pod);
         }
@@ -34,15 +31,28 @@ pub async fn get_pods(pods_api: Api<Pod>, pod_search: Regex) -> Result<Vec<Pod>,
     return Ok(filt_pods);
 }
 
+pub fn get_pod_name(pod: Pod) -> Result<String, Errors> {
+    match pod.metadata.name {
+        Some(val) => Ok(val),
+        None => return Err(Errors::Kubernetes("pod has no name".to_string(), "(no detail)".to_string())),
+    }
+}
+
+pub fn get_pod_status(pod: Pod) -> Result<String, Errors> {
+    match pod.status {
+        Some(val) => match val.phase {
+            Some(val) => Ok(val),
+            None => return Err(Errors::Kubernetes("pod has no phase".to_string(), "(no detail)".to_string())),
+        },
+        None => return Err(Errors::Kubernetes("pod has no status".to_string(), "(no detail)".to_string())),
+    }
+}
+
 async fn is_pod_running(pods_api: Api<Pod>, pod_name: String) -> bool {
-    let status = pods_api.get_status(pod_name.as_str()).await;
-    match status {
-        Ok(val) => match val.status {
-            Some(val) => match val.phase {
-                Some(val) => val == "Running",
-                None => false,
-            },
-            None => false,
+    match pods_api.get_status(pod_name.as_str()).await {
+        Ok(val) => match get_pod_status(val) {
+            Ok(val) => val == "Running",
+            Err(_) => false,
         },
         Err(_) => false,
     }
