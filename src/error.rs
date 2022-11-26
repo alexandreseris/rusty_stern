@@ -1,45 +1,19 @@
-use std::fmt;
+use thiserror::Error;
 
-#[derive(Debug, Clone)]
-pub struct ColorRGBError {
-    pub message: String,
-}
-
-impl fmt::Display for ColorRGBError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", &self.message)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ColorCycleError {
-    pub message: String,
-}
-
-impl fmt::Display for ColorCycleError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", &self.message)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct LogError {
-    pub message: String,
-}
-
-impl fmt::Display for LogError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", &self.message)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct GenericError {
-    pub message: String,
-}
-
-impl fmt::Display for GenericError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", &self.message)
-    }
+#[derive(Error, Debug)]
+pub enum Errors {
+    #[error("file `{0}` not found")]
+    FileNotFound(String),
+    #[error("error on file `{0}`: `{1}`")]
+    FileError(String, String),
+    #[error("`{0}`")]
+    Validation(String),
+    #[error("`{0}`")]
+    LogError(String),
+    #[error("`{0}`")]
+    StdErr(String),
+    #[error("api failled for `{0}`, detail: `{1}`")]
+    Kubernetes(String, String),
+    #[error("`{0}`")]
+    Other(String),
 }

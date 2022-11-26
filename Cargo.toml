@@ -21,3 +21,6 @@ clap = { version = "4.0.26", features = ["derive"] }
 home = "0.5.4"
 serde = "1.0.147"
 serde_json = "1.0.88"
+validator = { version = "0.16.0", features = ["derive"] }
+rusty_stern_traits = { path = "./rusty_stern_traits" }
+thiserror = "1.0.37"
