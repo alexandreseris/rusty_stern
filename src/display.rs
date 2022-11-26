@@ -1,10 +1,10 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::iter::Cycle;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use colors_transform::{Color as ColorTransform, Hsl, Rgb};
+use colors_transform::{Color as ColorTransform, Hsl as HslColorTransform, Rgb};
 use termcolor::{Color, ColorSpec, StandardStream, WriteColor};
 use tokio::sync::Mutex;
 use validator::Validate;
@@ -17,10 +17,32 @@ pub struct Saturation {
     pub value: u8,
 }
 
+impl FromStr for Saturation {
+    type Err = Errors;
+    fn from_str(string: &str) -> Result<Self, Self::Err> {
+        let value = match string.parse::<u8>() {
+            Ok(val) => val,
+            Err(err) => return Err(Errors::Validation(err.to_string())),
+        };
+        return Ok(Saturation { value });
+    }
+}
+
 #[derive(Debug, Validate, Clone)]
 pub struct Lightness {
     #[validate(range(min = 0, max = 100))]
     pub value: u8,
+}
+
+impl FromStr for Lightness {
+    type Err = Errors;
+    fn from_str(string: &str) -> Result<Self, Self::Err> {
+        let value = match string.parse::<u8>() {
+            Ok(val) => val,
+            Err(err) => return Err(Errors::Validation(err.to_string())),
+        };
+        return Ok(Lightness { value });
+    }
 }
 
 #[derive(Debug, Validate, Clone)]
@@ -51,11 +73,11 @@ pub struct HueInterval {
 }
 
 impl HueInterval {
-    pub fn validate(self) -> Result<HueInterval, Errors> {
+    pub fn validate(self) -> Result<(), Errors> {
         if self.start.value >= self.end.value {
             return Err(Errors::Validation("start value must be greater than end value".to_string()));
         } else {
-            return Ok(self);
+            return Ok(());
         }
     }
 }
@@ -76,6 +98,36 @@ impl FromStr for HueInterval {
             )));
         }
         return Ok(HueInterval { start, end });
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Hsl {
+    pub h: Hue,
+    pub s: Saturation,
+    pub l: Lightness,
+}
+
+impl Hsl {
+    pub fn validate(self) -> Result<(), validator::ValidationErrors> {
+        self.h.validate()?;
+        self.s.validate()?;
+        self.l.validate()?;
+        Ok(())
+    }
+}
+
+impl FromStr for Hsl {
+    type Err = Errors;
+    fn from_str(string: &str) -> Result<Self, Self::Err> {
+        let params: Vec<&str> = string.split(",").collect();
+        if params.len() != 3 {
+            return Err(Errors::Validation(format!("excpected 3 elements, found {} for {string}", params.len())));
+        }
+        let h = Hue::from_str(params[0])?;
+        let s = Saturation::from_str(params[1])?;
+        let l = Lightness::from_str(params[2])?;
+        return Ok(Hsl { h, s, l });
     }
 }
 
@@ -135,24 +187,38 @@ pub fn build_color_cycle(
     }
 
     let hue_count = hue_values.len();
+    let mut cycle_len = cycle_len;
+    if cycle_len == 0 {
+        cycle_len = 1;
+    }
     let hue_step = hue_count as u16 / cycle_len as u16;
     for step in 0..cycle_len {
         let current_hue_index = hue_step * step as u16;
         let current_hue = hue_values[current_hue_index as usize];
-        let rgb = Hsl::from(current_hue as f32, saturation.value as f32, lightness.value as f32).to_rgb();
+        let rgb = HslColorTransform::from(current_hue as f32, saturation.value as f32, lightness.value as f32).to_rgb();
         colors.push(rgb);
     }
     return Ok(colors.into_iter().cycle());
 }
 
-pub async fn get_padding(running_pods: Arc<Mutex<HashSet<String>>>) -> usize {
-    let pods = running_pods.lock().await;
+pub async fn get_padding(running_pods: Arc<Mutex<HashMap<String, HashSet<String>>>>) -> (usize, bool) {
+    let mut print_namespace = true;
+    let running_pods_lock = running_pods.lock().await;
+    let namespace_cnt = running_pods_lock.len();
+    if namespace_cnt <= 1 {
+        print_namespace = false;
+    }
     let mut max_len = 0;
-    for pod in pods.iter() {
-        let len = pod.len();
-        if len > max_len {
-            max_len = len;
+    for (namespace, pods) in running_pods_lock.iter() {
+        for pod in pods {
+            let mut len = pod.len();
+            if print_namespace {
+                len += namespace.len();
+            }
+            if len > max_len {
+                max_len = len;
+            }
         }
     }
-    return max_len;
+    return (max_len, print_namespace);
 }

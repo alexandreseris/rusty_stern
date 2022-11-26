@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::str;
 use std::sync::Arc;
 
@@ -10,12 +10,36 @@ use kube::api::{ListParams, LogParams};
 use kube::Api;
 use regex::Regex;
 use termcolor::StandardStream;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, MutexGuard};
 
 use crate::display::{get_padding, print_color};
 use crate::error::Errors;
 
-pub async fn get_pods(pods_api: Api<Pod>, pod_search: Regex) -> Result<Vec<Pod>, Errors> {
+fn get_pod_count_from_mutex(namespaces: MutexGuard<HashMap<String, HashSet<String>>>) -> usize {
+    let mut cnt = 0;
+    for (_, pods) in namespaces.iter() {
+        cnt += pods.len();
+    }
+    return cnt;
+}
+
+pub fn get_pod_count(namespaces: &HashMap<String, (Api<Pod>, Vec<Pod>)>) -> usize {
+    let mut cnt = 0;
+    for (_, (_, pods)) in namespaces {
+        cnt += pods.len();
+    }
+    return cnt;
+}
+
+pub async fn refresh_namespaces_pods(namespaces: &mut HashMap<String, (Api<Pod>, Vec<Pod>)>, pod_search: Regex) -> Result<(), Errors> {
+    for (namespace, (pod_api, _)) in namespaces.clone() {
+        let refreshed_pods = get_namespace_pods(pod_api.clone(), pod_search.clone()).await?;
+        namespaces.insert(namespace, (pod_api, refreshed_pods));
+    }
+    Ok(())
+}
+
+pub async fn get_namespace_pods(pods_api: Api<Pod>, pod_search: Regex) -> Result<Vec<Pod>, Errors> {
     let mut filt_pods: Vec<Pod> = Vec::new();
     let pods = match pods_api.list(&ListParams::default()).await {
         Ok(val) => val,
@@ -62,19 +86,23 @@ pub async fn print_log(
     stdout_lock: Arc<Mutex<(StandardStream, StandardStream)>>,
     pods_api: Api<Pod>,
     name: String,
+    namespace: String,
     color_rgb: Rgb,
-    running_pods: Arc<Mutex<HashSet<String>>>,
+    running_pods: Arc<Mutex<HashMap<String, HashSet<String>>>>,
     params: LogParams,
 ) -> Result<(), Errors> {
     let pod_count = {
         let mut running_pods_locked = running_pods.lock().await;
-        running_pods_locked.insert(name.clone());
-        running_pods_locked.len()
+        match running_pods_locked.get_mut(&namespace) {
+            Some(val) => val.insert(name.clone()),
+            None => return Err(Errors::Other("shared running pods have inconsistent state".to_string())),
+        };
+        get_pod_count_from_mutex(running_pods_locked)
     };
     print_color(
         stdout_lock.clone(),
         color_rgb,
-        format!("+ pod {name} starting, following {pod_count} pods"),
+        format!("+++ pod {namespace}/{name} starting, following {pod_count} pods"),
         true,
     )
     .await?;
@@ -106,13 +134,26 @@ pub async fn print_log(
             Ok(content) => content,
             Err(err) => return Err(Errors::LogError(err.to_string())),
         };
-        let padding = " ".repeat(get_padding(running_pods.clone()).await - name.len());
-        print_color(stdout_lock.clone(), color_rgb, format!("{name}:{padding} {content}"), false).await?;
+
+        let (padding, print_namespace) = get_padding(running_pods.clone()).await;
+        let message: String;
+        if print_namespace {
+            let padding_str = " ".repeat(padding - name.len() - namespace.len() + 1);
+            message = format!("{namespace}/{name}:{padding_str} {content}");
+        } else {
+            let padding_str = " ".repeat(padding - name.len());
+            message = format!("{name}:{padding_str} {content}");
+        }
+
+        print_color(stdout_lock.clone(), color_rgb, message, false).await?;
     }
     let pod_count = {
         let mut running_pods_locked = running_pods.lock().await;
-        running_pods_locked.remove(&name.clone());
-        running_pods_locked.len()
+        match running_pods_locked.get_mut(&namespace) {
+            Some(val) => val.remove(&name.clone()),
+            None => return Err(Errors::Other("shared running pods have inconsistent state".to_string())),
+        };
+        get_pod_count_from_mutex(running_pods_locked)
     };
     let error_reason = match error {
         Some(value) => format!(", reason: {}", value.to_string()),
@@ -121,7 +162,7 @@ pub async fn print_log(
     print_color(
         stdout_lock.clone(),
         color_rgb,
-        format!("- pod {name} ended{error_reason}, following {pod_count} pods"),
+        format!("--- pod {namespace}/{name} ended{error_reason}, following {pod_count} pods"),
         true,
     )
     .await?;

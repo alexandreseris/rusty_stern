@@ -14,7 +14,7 @@ use rusty_stern_traits::Update;
 use validator::Validate;
 
 use crate::{
-    display::{HueInterval, Lightness, Saturation},
+    display::{Hsl as CustomHsl, HueInterval, Lightness, Saturation},
     error::Errors,
 };
 
@@ -54,9 +54,9 @@ pub struct Settings {
     #[serde(default)]
     pub kubeconfig: String,
     /// kubernetes namespace to use. if the option is not passed, use the default namespace
-    #[arg(short, long, value_name="nmspc", default_value_t = Settings::default().namespace)]
+    #[arg(short, long, value_name = "nmspc")]
     #[serde(default)]
-    pub namespace: String,
+    pub namespace: Option<Vec<String>>,
 
     /// retrieve previous terminated container logs
     #[arg(long, default_value_t = Settings::default().previous)]
@@ -84,15 +84,11 @@ pub struct Settings {
     #[serde(default)]
     pub loop_pause: u64,
 
-    /// verbose output
-    #[arg(short, long, default_value_t = Settings::default().verbose)]
+    /// default hsl color (format is hue,saturation,lightness), used for general and error messages
+    /// default hsl color (format is hue,saturation,lightness)
+    #[arg(long, value_name="hsl", default_value_t = Settings::default().default_color)]
     #[serde(default)]
-    pub verbose: bool,
-
-    /// debug hsl color (format is hue,saturation,lightness)
-    #[arg(long, value_name="hsl", default_value_t = Settings::default().debug_color)]
-    #[serde(default)]
-    pub debug_color: String,
+    pub default_color: String,
     /// number of color to generate for the color cycle. if 0, it is later set for about the number of result retuned by the first pod search
     #[arg(long, value_name = "num", default_value_t = Settings::default().color_cycle_len)]
     #[serde(default)]
@@ -123,15 +119,14 @@ impl Default for Settings {
         Settings {
             pod_search: ".+".to_string(),
             kubeconfig: "".to_string(),
-            namespace: "".to_string(),
+            namespace: None,
             previous: false,
             since_seconds: 0,
             tail_lines: 0,
             timestamps: false,
             disable_pods_refresh: false,
             loop_pause: 2,
-            verbose: false,
-            debug_color: "0,0,100".to_string(),
+            default_color: "0,0,100".to_string(),
             color_cycle_len: 0,
             hue_intervals: "0-359".to_string(),
             color_saturation: 100,
@@ -142,18 +137,17 @@ impl Default for Settings {
 }
 
 #[derive(Clone)]
-pub struct SettingsParsed {
+pub struct SettingsValidated {
     pub pod_search: Regex,
     pub kubeconfig: Option<PathBuf>,
-    pub namespace: Option<String>,
+    pub namespace: Option<Vec<String>>,
     pub previous: bool,
     pub since_seconds: i64,
     pub tail_lines: i64,
     pub timestamps: bool,
     pub disable_pods_refresh: bool,
     pub loop_pause: u64,
-    pub verbose: bool,
-    pub debug_color: Rgb,
+    pub default_color: Rgb,
     pub color_cycle_len: u8,
     pub hue_intervals: Vec<HueInterval>,
     pub color_saturation: Saturation,
@@ -162,7 +156,7 @@ pub struct SettingsParsed {
 }
 
 impl Settings {
-    pub fn validate(self) -> Result<SettingsParsed, Errors> {
+    pub fn to_validate(self) -> Result<SettingsValidated, Errors> {
         let pod_search = match Regex::new(self.pod_search.as_str()) {
             Ok(val) => val,
             Err(err) => return Err(Errors::Validation(err.to_string())),
@@ -175,39 +169,33 @@ impl Settings {
                 Err(err) => return Err(Errors::Other(err.to_string())),
             })
         };
-        let namespace = if self.namespace == "".to_string() {
-            None
-        } else {
-            Some(self.clone().namespace)
-        };
-        let debug_color = self.get_debug_color()?;
+        let default_color = self.get_default_color()?;
         let hue_intervals = self.get_hue_intervals()?;
         let color_saturation = Saturation {
             value: self.color_saturation,
         };
-        let color_lightness = Lightness { value: self.color_lightness };
 
         match color_saturation.validate() {
             Ok(val) => val,
             Err(err) => return Err(Errors::Validation(err.to_string())),
         };
+        let color_lightness = Lightness { value: self.color_lightness };
         match color_lightness.validate() {
             Ok(val) => val,
             Err(err) => return Err(Errors::Validation(err.to_string())),
         };
 
-        return Ok(SettingsParsed {
+        return Ok(SettingsValidated {
             pod_search,
             kubeconfig,
-            namespace,
+            namespace: self.namespace,
             previous: self.previous,
             since_seconds: self.since_seconds,
             tail_lines: self.tail_lines,
             timestamps: self.timestamps,
             disable_pods_refresh: self.disable_pods_refresh,
             loop_pause: self.loop_pause,
-            verbose: self.verbose,
-            debug_color,
+            default_color,
             color_cycle_len: self.color_cycle_len,
             hue_intervals,
             color_saturation,
@@ -233,11 +221,13 @@ impl Settings {
         return Ok(intervals);
     }
 
-    pub fn get_debug_color(&self) -> Result<Rgb, Errors> {
-        return match Hsl::from_str(self.debug_color.as_str()) {
-            Ok(debug_color) => Ok(debug_color.to_rgb()),
-            Err(err) => Err(Errors::Validation(err.message)),
+    pub fn get_default_color(&self) -> Result<Rgb, Errors> {
+        let hsl = CustomHsl::from_str(self.default_color.as_str())?;
+        match hsl.clone().validate() {
+            Ok(val) => val,
+            Err(err) => return Err(Errors::Validation(err.to_string())),
         };
+        return Ok(Hsl::from(hsl.h.value as f32, hsl.s.value as f32, hsl.l.value as f32).to_rgb());
     }
 
     pub fn from_config_file() -> Result<Settings, Errors> {

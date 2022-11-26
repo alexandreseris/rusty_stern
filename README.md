@@ -50,28 +50,29 @@ you can use the option --generate-config-file to generate a default config file 
 command line arguments have priority over config file settings
 
 ```text
-Usage: rusty_stern [OPTIONS]
+Usage: rusty_stern.exe [OPTIONS]
 
 Options:
-  -p, --pod-search <reg pattern>  regex to match pod names [default: .+]
-  -k, --kubeconfig <filepath>     path to the kubeconfig file. if the option is not passed, try to infer configuration [default: ]
-  -n, --namespace <nmspc>         kubernetes namespace to use. if the option is not passed, use the default namespace [default: ]
-      --previous                  retrieve previous terminated container logs
-      --since-seconds <seconds>   a relative time in seconds before the current time from which to show logs [default: 0]
-      --tail-lines <line_cnt>     number of lines from the end of the logs to show [default: 0]
-      --timestamps                show timestamp at the begining of each log line
-      --loop-pause <seconds>      number of seconds between each pod list query (doesn't affect log line display) [default: 2]
-  -v, --verbose                   verbose output
-      --debug-color <rgb>         debug rgb color (format is 0-255,0-255,0-255) [default: 255,255,255]
-      --color-cycle-len <num>     number of color to generate for the color cycle. if 0, it is later set for about the number of result retuned by the first pod search [default: 0]
-      --color-saturation <sat>    the color saturation (0-100) [default: 100]
-      --color-lightness <light>   the color lightness (0-100) [default: 50]
-      --generate-config-file      generate a default config file and exit
-  -h, --help                      Print help information
-  -V, --version                   Print version information
+  -p, --pod-search <reg pattern>   regex to match pod names [default: .+]
+  -k, --kubeconfig <filepath>      path to the kubeconfig file. if the option is not passed, try to infer configuration [default: ]
+  -n, --namespace <nmspc>          kubernetes namespace to use. if the option is not passed, use the default namespace
+      --previous                   retrieve previous terminated container logs
+      --since-seconds <seconds>    a relative time in seconds before the current time from which to show logs [default: 0]
+      --tail-lines <line_cnt>      number of lines from the end of the logs to show [default: 0]
+      --timestamps                 show timestamp at the begining of each log line
+      --disable-pods-refresh       disable automatic pod list refresh
+      --loop-pause <seconds>       number of seconds between each pod list query (doesn't affect log line display) [default: 2]
+      --default-color <hsl>        default hsl color (format is hue,saturation,lightness), used for general and error messages default hsl color (format is hue,saturation,lightness) [default: 0,0,100]
+      --color-cycle-len <num>      number of color to generate for the color cycle. if 0, it is later set for about the number of result retuned by the first pod search [default: 0]
+      --hue-intervals <intervals>  hue (hsl) intervals to pick for color cycle generation format is $start-$end(,$start-$end)* where $start>=0 and $end<=359 eg for powershell: 0-180,280-359 [default: 0-359]
+      --color-saturation <sat>     the color saturation (0-100) [default: 100]
+      --color-lightness <light>    the color lightness (0-100) [default: 50]
+      --generate-config-file       generate a default config file and exit
+  -h, --help                       Print help information
+  -V, --version                    Print version information
 ```
 
 ## Left to do
 
-- multiple namespace
-- proper error handling :O
+- changing default color does not work
+- json config file is fucked up
