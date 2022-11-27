@@ -1,16 +1,11 @@
-use std::fs;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::string::ToString;
 
 use clap::Parser;
 use colors_transform::{Color, Hsl, Rgb};
-use home;
 use regex::Regex;
-use serde::{Deserialize, Serialize};
-use serde_json::to_string_pretty;
 
-use rusty_stern_traits::Update;
 use validator::Validate;
 
 use crate::{
@@ -18,99 +13,60 @@ use crate::{
     error::Errors,
 };
 
-fn get_config_file_path() -> Result<PathBuf, Errors> {
-    let home_dir = match home::home_dir() {
-        Some(val) => val,
-        None => return Err(Errors::FileNotFound("home directory is not available".to_string())),
-    };
-    return Ok(home_dir.join(".rusty_stern").join("config"));
-}
-
-pub fn create_default_config_file() -> Result<(), Errors> {
-    let conf_file = get_config_file_path()?;
-    let def_settings = Settings { ..Default::default() };
-    let contents_str = match to_string_pretty(&def_settings) {
-        Ok(val) => val,
-        Err(err) => return Err(Errors::Other(err.to_string())),
-    };
-    let contents = contents_str.as_bytes();
-    match fs::write(conf_file.clone(), contents) {
-        Ok(val) => val,
-        Err(err) => return Err(Errors::FileError(conf_file.display().to_string(), err.to_string())),
-    };
-    println!("wrote default configuration to {} file", conf_file.display());
-    Ok(())
-}
-
-#[derive(Parser, Debug, Serialize, Deserialize, Clone, Update)]
+#[derive(Parser, Debug, Clone)]
 #[command(author, version, about, long_about = None)]
 pub struct Settings {
     /// regex to match pod names
     #[arg(short, long, value_name="reg pattern", default_value_t = Settings::default().pod_search)]
-    #[serde(default)]
     pub pod_search: String,
     /// path to the kubeconfig file. if the option is not passed, try to infer configuration
     #[arg(short, long, value_name="filepath", default_value_t = Settings::default().kubeconfig)]
-    #[serde(default)]
     pub kubeconfig: String,
     /// kubernetes namespace to use. if the option is not passed, use the default namespace
     #[arg(short, long, value_name = "nmspc")]
-    #[serde(default)]
     pub namespace: Option<Vec<String>>,
 
     /// retrieve previous terminated container logs
     #[arg(long, default_value_t = Settings::default().previous)]
-    #[serde(default)]
     pub previous: bool,
     /// a relative time in seconds before the current time from which to show logs
     #[arg(long, value_name = "seconds", default_value_t = Settings::default().since_seconds)]
-    #[serde(default)]
     pub since_seconds: i64,
     /// number of lines from the end of the logs to show
     #[arg(long, value_name = "line_cnt", default_value_t = Settings::default().tail_lines)]
-    #[serde(default)]
     pub tail_lines: i64,
     /// show timestamp at the begining of each log line
     #[arg(long, default_value_t = Settings::default().timestamps)]
-    #[serde(default)]
     pub timestamps: bool,
 
     /// disable automatic pod list refresh
     #[arg(long, default_value_t = Settings::default().disable_pods_refresh)]
-    #[serde(default)]
     pub disable_pods_refresh: bool,
     /// number of seconds between each pod list query (doesn't affect log line display)
     #[arg(long, value_name = "seconds", default_value_t = Settings::default().loop_pause)]
-    #[serde(default)]
     pub loop_pause: u64,
 
     /// default hsl color (format is hue,saturation,lightness), used for general and error messages
     /// default hsl color (format is hue,saturation,lightness)
     #[arg(long, value_name="hsl", default_value_t = Settings::default().default_color)]
-    #[serde(default)]
     pub default_color: String,
     /// number of color to generate for the color cycle. if 0, it is later set for about the number of result retuned by the first pod search
     #[arg(long, value_name = "num", default_value_t = Settings::default().color_cycle_len)]
-    #[serde(default)]
     pub color_cycle_len: u8,
     /// hue (hsl) intervals to pick for color cycle generation
     /// format is $start-$end(,$start-$end)* where $start>=0 and $end<=359
     /// eg for powershell: 0-180,280-359
     #[arg(long, value_name = "intervals", default_value_t = Settings::default().hue_intervals)]
-    #[serde(default)]
     pub hue_intervals: String,
     /// the color saturation (0-100)
     #[arg(long, value_name = "sat", default_value_t = Settings::default().color_saturation)]
-    #[serde(default)]
     pub color_saturation: u8,
     /// the color lightness (0-100)
     #[arg(long, value_name = "light", default_value_t = Settings::default().color_lightness)]
-    #[serde(default)]
     pub color_lightness: u8,
 
     /// generate a default config file and exit
     #[arg(long, default_value_t = Settings::default().generate_config_file)]
-    #[serde(default)]
     pub generate_config_file: bool,
 }
 
@@ -156,7 +112,7 @@ pub struct SettingsValidated {
 }
 
 impl Settings {
-    pub fn to_validate(self) -> Result<SettingsValidated, Errors> {
+    pub fn to_validated(self) -> Result<SettingsValidated, Errors> {
         let pod_search = match Regex::new(self.pod_search.as_str()) {
             Ok(val) => val,
             Err(err) => return Err(Errors::Validation(err.to_string())),
@@ -228,23 +184,5 @@ impl Settings {
             Err(err) => return Err(Errors::Validation(err.to_string())),
         };
         return Ok(Hsl::from(hsl.h.value as f32, hsl.s.value as f32, hsl.l.value as f32).to_rgb());
-    }
-
-    pub fn from_config_file() -> Result<Settings, Errors> {
-        let conf_file = get_config_file_path()?;
-        let conf_file_display = conf_file.display();
-        if conf_file.exists() {
-            let file_content = match fs::read_to_string(conf_file.clone()) {
-                Ok(val) => val,
-                Err(err) => return Err(Errors::Other(format!("failled to read config file {conf_file_display}: {err}"))),
-            };
-            let settings = match serde_json::from_str::<Settings>(file_content.as_str()) {
-                Ok(val) => val,
-                Err(err) => return Err(Errors::Validation(format!("failled to parse config file {conf_file_display}: {err}"))),
-            };
-            return Ok(settings);
-        } else {
-            return Err(Errors::FileNotFound(conf_file_display.to_string()));
-        }
     }
 }

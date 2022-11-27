@@ -16,12 +16,10 @@ use termcolor::{ColorChoice, StandardStream};
 use tokio;
 use tokio::sync::Mutex;
 
-use rusty_stern_traits::Update;
-
 use display::{build_color_cycle, eprint_color, pick_color, print_color};
 use error::Errors;
 use kubernetes::{get_pod_count, get_pod_name, get_pod_status, print_log, refresh_namespaces_pods};
-use settings::{create_default_config_file, Settings};
+use settings::Settings;
 
 #[tokio::main]
 async fn main() -> Result<(), Errors> {
@@ -29,22 +27,9 @@ async fn main() -> Result<(), Errors> {
     let stderr = StandardStream::stderr(ColorChoice::Always);
     let stdout_lock = Arc::new(Mutex::new((stdout, stderr)));
 
-    let mut settings = match Settings::from_config_file() {
-        Ok(val) => val,
-        Err(err) => {
-            eprintln!("{err}");
-            Settings { ..Default::default() }
-        }
-    };
+    let settings = Settings::do_parse();
 
-    let args = Settings::do_parse();
-    if args.generate_config_file {
-        create_default_config_file()?;
-        return Ok(());
-    }
-
-    settings.update_from(args);
-    let settings = match settings.to_validate() {
+    let settings = match settings.to_validated() {
         Ok(val) => val,
         Err(err) => return Err(Errors::Validation(err.to_string())),
     };
