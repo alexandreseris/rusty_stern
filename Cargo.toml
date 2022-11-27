@@ -1,6 +1,6 @@
 [package]
 name = "rusty_stern"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 description = "a rust implementation of stern (kubernetes)"
 authors = ["https://github.com/alexandreseris"]
