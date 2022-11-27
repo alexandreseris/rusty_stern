@@ -64,10 +64,6 @@ pub struct Settings {
     /// the color lightness (0-100)
     #[arg(long, value_name = "light", default_value_t = Settings::default().color_lightness)]
     pub color_lightness: u8,
-
-    /// generate a default config file and exit
-    #[arg(long, default_value_t = Settings::default().generate_config_file)]
-    pub generate_config_file: bool,
 }
 
 impl Default for Settings {
@@ -87,7 +83,6 @@ impl Default for Settings {
             hue_intervals: "0-359".to_string(),
             color_saturation: 100,
             color_lightness: 50,
-            generate_config_file: false,
         }
     }
 }
@@ -108,7 +103,6 @@ pub struct SettingsValidated {
     pub hue_intervals: Vec<HueInterval>,
     pub color_saturation: Saturation,
     pub color_lightness: Lightness,
-    pub generate_config_file: bool,
 }
 
 impl Settings {
@@ -156,7 +150,6 @@ impl Settings {
             hue_intervals,
             color_saturation,
             color_lightness,
-            generate_config_file: self.generate_config_file,
         });
     }
 
@@ -183,6 +176,8 @@ impl Settings {
             Ok(val) => val,
             Err(err) => return Err(Errors::Validation(err.to_string())),
         };
-        return Ok(Hsl::from(hsl.h.value as f32, hsl.s.value as f32, hsl.l.value as f32).to_rgb());
+        let lib_hsl = Hsl::from(hsl.h.value as f32, hsl.s.value as f32, hsl.l.value as f32);
+        let rgb = lib_hsl.to_rgb();
+        return Ok(rgb);
     }
 }

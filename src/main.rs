@@ -101,19 +101,19 @@ async fn main() -> Result<(), Errors> {
 
     let running_pods_lock = Arc::new(Mutex::new(running_pods));
 
+    refresh_namespaces_pods(&mut namespaces, settings.pod_search.clone()).await?;
+
     print_color(
         stdout_lock.clone(),
         settings.default_color,
         format!(
-            "initial search found {} pods accross {} namespaces",
+            "initial search found {} pods across {} namespaces",
             get_pod_count(&namespaces),
             namespaces.len()
         ),
         true,
     )
     .await?;
-
-    refresh_namespaces_pods(&mut namespaces, settings.pod_search.clone()).await?;
 
     if color_cycle_len == 0 {
         let pods_cnt = get_pod_count(&namespaces);

@@ -195,7 +195,8 @@ pub fn build_color_cycle(
     for step in 0..cycle_len {
         let current_hue_index = hue_step * step as u16;
         let current_hue = hue_values[current_hue_index as usize];
-        let rgb = HslColorTransform::from(current_hue as f32, saturation.value as f32, lightness.value as f32).to_rgb();
+        let hsl = HslColorTransform::from(current_hue as f32, saturation.value as f32, lightness.value as f32);
+        let rgb = hsl.to_rgb();
         colors.push(rgb);
     }
     return Ok(colors.into_iter().cycle());

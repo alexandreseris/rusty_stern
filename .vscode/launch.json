@@ -1,0 +1,17 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch cppvsdbg",
+            "type": "cppvsdbg", // requiere c/c++ extension: https://marketplace.visualstudio.com/items?itemName=ms-vscode.cpptools
+            "request": "launch",
+            "program": "${workspaceRoot}/target/debug/rusty_stern.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceRoot}",
+            "environment": [],
+            "externalConsole": true,
+            "console": "integratedTerminal"
+        }
+    ]
+}

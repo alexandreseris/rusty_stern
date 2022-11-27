@@ -1,0 +1,111 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "type": "cargo",
+            "command": "build",
+            "group": "build",
+            "label": "build",
+            "detail": "build using develop profile",
+            "icon": {
+                "color": "terminal.ansiBlue"
+            },
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "options": {},
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": true
+            }
+        },
+        {
+            "type": "cargo",
+            "command": "run",
+            "group": "build",
+            "label": "doc",
+            "detail": "print program help message",
+            "icon": {
+                "color": "terminal.ansiGreen"
+            },
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "options": {},
+            "args": [
+                "--",
+                "--help"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": true
+            }
+        },
+        {
+            "type": "cargo",
+            "command": "build",
+            "group": "build",
+            "label": "build release windows",
+            "detail": "build for windows using profile release",
+            "icon": {
+                "color": "terminal.ansiRed"
+            },
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "options": {},
+            "args": [
+                "--bin",
+                "rusty_stern",
+                "--release",
+                "--target",
+                "x86_64-pc-windows-msvc"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": true
+            }
+        },
+        {
+            "type": "cargo",
+            "command": "build",
+            "group": "build",
+            "label": "build release linux",
+            "detail": "build for linux using profile release",
+            "icon": {
+                "color": "terminal.ansiRed"
+            },
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "options": {},
+            "args": [
+                "--bin",
+                "rusty_stern",
+                "--release",
+                "--target",
+                "x86_64-unknown-linux-gnu"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": true
+            }
+        },
+    ]
+}
