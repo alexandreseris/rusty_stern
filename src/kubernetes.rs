@@ -103,7 +103,6 @@ pub async fn print_log(
         stdout_lock.clone(),
         color_rgb,
         format!("+++ pod {namespace}/{name} starting, following {pod_count} pods"),
-        true,
     )
     .await?;
     let mut stream = match pods_api.log_stream(&name, &params).await {
@@ -145,7 +144,7 @@ pub async fn print_log(
             message = format!("{name}:{padding_str} {content}");
         }
 
-        print_color(stdout_lock.clone(), color_rgb, message, false).await?;
+        print_color(stdout_lock.clone(), color_rgb, message).await?;
     }
     let pod_count = {
         let mut running_pods_locked = running_pods.lock().await;
@@ -163,7 +162,6 @@ pub async fn print_log(
         stdout_lock.clone(),
         color_rgb,
         format!("--- pod {namespace}/{name} ended{error_reason}, following {pod_count} pods"),
-        true,
     )
     .await?;
     Ok(())

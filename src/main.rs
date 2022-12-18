@@ -21,6 +21,7 @@ use error::Errors;
 use kubernetes::{get_pod_count, get_pod_name, get_pod_status, print_log, refresh_namespaces_pods};
 use settings::Settings;
 
+#[allow(deprecated)]
 #[tokio::main]
 async fn main() -> Result<(), Errors> {
     let stdout = StandardStream::stdout(ColorChoice::Always);
@@ -53,31 +54,31 @@ async fn main() -> Result<(), Errors> {
         timestamps: settings.timestamps,
     };
 
-    let client = match settings.kubeconfig {
+    let mut conf = match settings.kubeconfig {
         Some(val) => {
             let kconf = match Kubeconfig::read_from(val) {
                 Ok(val) => val,
                 Err(err) => return Err(Errors::Kubernetes("failled to read config file".to_string(), err.to_string())),
             };
             let kconfopt = &KubeConfigOptions::default();
-            let conf = match Config::from_custom_kubeconfig(kconf, kconfopt).await {
+            match Config::from_custom_kubeconfig(kconf, kconfopt).await {
                 Ok(val) => val,
                 Err(err) => return Err(Errors::Kubernetes("failled to parse config file".to_string(), err.to_string())),
-            };
-            match Client::try_from(conf) {
-                Ok(val) => val,
-                Err(err) => return Err(Errors::Kubernetes("failled to use kubernetes configuration".to_string(), err.to_string())),
             }
         }
-        None => match Client::try_default().await {
+        None => match Config::infer().await {
             Ok(val) => val,
-            Err(err) => {
-                return Err(Errors::Kubernetes(
-                    "failled to use default kubernetes configuration".to_string(),
-                    err.to_string(),
-                ))
-            }
+            Err(err) => return Err(Errors::Kubernetes("failled to get default config".to_string(), err.to_string())),
         },
+    };
+    conf.read_timeout = None;
+    conf.write_timeout = None;
+    conf.connect_timeout = None;
+    conf.timeout = None;
+
+    let client = match Client::try_from(conf) {
+        Ok(val) => val,
+        Err(err) => return Err(Errors::Kubernetes("failled to use kubernetes configuration".to_string(), err.to_string())),
     };
 
     // namespace => [pod_name, ...]
@@ -111,7 +112,6 @@ async fn main() -> Result<(), Errors> {
             get_pod_count(&namespaces),
             namespaces.len()
         ),
-        true,
     )
     .await?;
 
@@ -129,7 +129,7 @@ async fn main() -> Result<(), Errors> {
     loop {
         let pods_cnt = get_pod_count(&namespaces);
         if pods_cnt == 0 && !no_pod_found {
-            eprint_color(stdout_lock.clone(), settings.default_color, "no pod found :(".to_string(), true).await?;
+            eprint_color(stdout_lock.clone(), settings.default_color, "no pod found :(".to_string()).await?;
             tokio::time::sleep(tokio::time::Duration::from_millis(settings.loop_pause * 1000)).await;
             no_pod_found = true;
         }
@@ -171,7 +171,7 @@ async fn main() -> Result<(), Errors> {
                             Ok(_) => Ok(()),
                             Err(err) => {
                                 let error = Errors::Other(err.to_string());
-                                eprint_color(stdout_lock, settings.default_color, error.to_string(), true).await?;
+                                eprint_color(stdout_lock, settings.default_color, error.to_string()).await?;
                                 return Err(error);
                             }
                         }
