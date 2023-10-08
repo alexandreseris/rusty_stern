@@ -26,7 +26,7 @@ use settings::Settings;
 async fn main() -> Result<(), Errors> {
     let stdout = StandardStream::stdout(ColorChoice::Always);
     let stderr = StandardStream::stderr(ColorChoice::Always);
-    let stdout_lock = Arc::new(Mutex::new((stdout, stderr)));
+    let stdouterr_lock = Arc::new(Mutex::new((stdout, stderr)));
 
     let settings = Settings::do_parse();
 
@@ -94,7 +94,7 @@ async fn main() -> Result<(), Errors> {
     refresh_namespaces_pods(&mut namespaces, settings.pod_search.clone()).await?;
 
     print_color(
-        stdout_lock.clone(),
+        stdouterr_lock.clone(),
         None,
         format!(
             "initial search found {} pods across {} namespaces",
@@ -118,7 +118,7 @@ async fn main() -> Result<(), Errors> {
         refresh_namespaces_pods(&mut namespaces, settings.pod_search.clone()).await?;
         let pods_cnt = get_pod_count(&namespaces);
         if pods_cnt == 0 && !no_pod_found {
-            eprint_color(stdout_lock.clone(), "no pod found :(".to_string()).await?;
+            eprint_color(stdouterr_lock.clone(), "no pod found :(".to_string()).await?;
             tokio::time::sleep(tokio::time::Duration::from_millis(settings.loop_pause * 1000)).await;
             no_pod_found = true;
         } else if pods_cnt != 0 {
@@ -143,7 +143,7 @@ async fn main() -> Result<(), Errors> {
                     let name_cp = name.clone();
                     let namespace_cp = namespace.clone();
                     let color = pick_color(&mut color_cycle).clone();
-                    let stdout_lock = stdout_lock.clone();
+                    let stdout_lock = stdouterr_lock.clone();
                     let running_pods_lock = running_pods_lock.clone();
                     let params = params.clone();
                     let filter = settings.filter.clone();
