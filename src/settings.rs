@@ -23,9 +23,9 @@ pub struct Settings {
     #[arg(short, long, value_name = "filepath", default_value = "")]
     pub kubeconfig: String,
 
-    /// kubernetes namespaces to use. if the option is not passed, use the default namespace
-    #[arg(short, long, value_name = "nmspc")]
-    pub namespaces: Option<Vec<String>>,
+    /// kubernetes namespaces to use separated by commas.
+    #[arg(short, long, value_name = "nmspc", default_value = "default")]
+    pub namespaces: String,
 
     /// retrieve previous terminated container logs
     #[arg(long, default_value_t = false)]
@@ -43,17 +43,9 @@ pub struct Settings {
     #[arg(long, default_value_t = false)]
     pub timestamps: bool,
 
-    /// disable automatic pod list refresh
-    #[arg(long, default_value_t = false)]
-    pub disable_pods_refresh: bool,
-
     /// number of seconds between each pod list query (doesn't affect log line display)
     #[arg(long, value_name = "seconds", default_value_t = 2)]
     pub loop_pause: u64,
-
-    /// number of color to generate for the color cycle. if 0, it is later set for the number of result retuned by the first pod search
-    #[arg(long, value_name = "num", default_value_t = 0)]
-    pub color_cycle_len: u8,
 
     /// hue (hsl) intervals to pick for color cycle generation
     /// format is $start-$end(,$start-$end)* where $start>=0 and $end<=359
@@ -87,9 +79,7 @@ pub struct SettingsValidated {
     pub since_seconds: i64,
     pub tail_lines: i64,
     pub timestamps: bool,
-    pub disable_pods_refresh: bool,
     pub loop_pause: u64,
-    pub color_cycle_len: u8,
     pub hue_intervals: Vec<HueInterval>,
     pub color_saturation: Saturation,
     pub color_lightness: Lightness,
@@ -111,10 +101,7 @@ impl Settings {
                 Err(err) => return Err(Errors::Other(err.to_string())),
             })
         };
-        let namespaces = match self.namespaces.clone() {
-            Some(namespaces) => namespaces,
-            None => vec!["default".to_string()],
-        };
+        let namespaces = self.namespaces.split(",").map(|s| s.to_string()).collect();
         let hue_intervals = self.get_hue_intervals()?;
         let color_saturation = Saturation {
             value: self.color_saturation,
@@ -155,9 +142,7 @@ impl Settings {
             since_seconds: self.since_seconds,
             tail_lines: self.tail_lines,
             timestamps: self.timestamps,
-            disable_pods_refresh: self.disable_pods_refresh,
             loop_pause: self.loop_pause,
-            color_cycle_len: self.color_cycle_len,
             hue_intervals,
             color_saturation,
             color_lightness,

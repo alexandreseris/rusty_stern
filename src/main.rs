@@ -35,8 +35,6 @@ async fn main() -> Result<(), Errors> {
         Err(err) => return Err(Errors::Validation(err.to_string())),
     };
 
-    let mut color_cycle_len = settings.color_cycle_len;
-
     let params = LogParams {
         container: None,
         follow: true,
@@ -106,9 +104,8 @@ async fn main() -> Result<(), Errors> {
     )
     .await?;
 
-    if color_cycle_len == 0 {
-        color_cycle_len = get_pod_count(&namespaces) as u8;
-    }
+    let color_cycle_len = get_pod_count(&namespaces) as u8;
+
     let mut color_cycle = build_color_cycle(
         color_cycle_len,
         settings.color_saturation,
@@ -117,10 +114,8 @@ async fn main() -> Result<(), Errors> {
     )?;
     let mut no_pod_found = false;
     loop {
-        if !settings.disable_pods_refresh {
-            tokio::time::sleep(tokio::time::Duration::from_millis(settings.loop_pause * 1000)).await;
-            refresh_namespaces_pods(&mut namespaces, settings.pod_search.clone()).await?;
-        }
+        tokio::time::sleep(tokio::time::Duration::from_millis(settings.loop_pause * 1000)).await;
+        refresh_namespaces_pods(&mut namespaces, settings.pod_search.clone()).await?;
         let pods_cnt = get_pod_count(&namespaces);
         if pods_cnt == 0 && !no_pod_found {
             eprint_color(stdout_lock.clone(), "no pod found :(".to_string()).await?;
