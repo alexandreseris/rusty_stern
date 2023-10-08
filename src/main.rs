@@ -135,11 +135,12 @@ async fn main() -> Result<(), Errors> {
             eprint_color(stdout_lock.clone(), settings.default_color, "no pod found :(".to_string()).await?;
             tokio::time::sleep(tokio::time::Duration::from_millis(settings.loop_pause * 1000)).await;
             no_pod_found = true;
+        } else if pods_cnt != 0 {
+            no_pod_found = false;
         }
         if no_pod_found {
             continue;
         }
-        no_pod_found = false;
         for (namespace, (pod_api, pods)) in namespaces.clone() {
             for pod in pods {
                 let name = get_pod_name(pod.clone())?;
