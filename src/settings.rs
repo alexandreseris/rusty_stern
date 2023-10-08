@@ -16,78 +16,66 @@ use crate::{
 #[command(author, version, about, long_about = None)]
 pub struct Settings {
     /// regex to match pod names
-    #[arg(short, long, value_name="reg pattern", default_value_t = Settings::default().pod_search)]
+    #[arg(short, long, value_name = "reg pattern", default_value = ".+")]
     pub pod_search: String,
+
     /// path to the kubeconfig file. if the option is not passed, try to infer configuration
-    #[arg(short, long, value_name="filepath", default_value_t = Settings::default().kubeconfig)]
+    #[arg(short, long, value_name = "filepath", default_value = "")]
     pub kubeconfig: String,
-    /// kubernetes namespace to use. if the option is not passed, use the default namespace
+
+    /// kubernetes namespaces to use. if the option is not passed, use the default namespace
     #[arg(short, long, value_name = "nmspc")]
     pub namespaces: Option<Vec<String>>,
 
     /// retrieve previous terminated container logs
-    #[arg(long, default_value_t = Settings::default().previous)]
+    #[arg(long, default_value_t = false)]
     pub previous: bool,
+
     /// a relative time in seconds before the current time from which to show logs
-    #[arg(long, value_name = "seconds", default_value_t = Settings::default().since_seconds)]
+    #[arg(long, value_name = "seconds", default_value_t = 0)]
     pub since_seconds: i64,
+
     /// number of lines from the end of the logs to show
-    #[arg(long, value_name = "line_cnt", default_value_t = Settings::default().tail_lines)]
+    #[arg(long, value_name = "line_cnt", default_value_t = 0)]
     pub tail_lines: i64,
+
     /// show timestamp at the begining of each log line
-    #[arg(long, default_value_t = Settings::default().timestamps)]
+    #[arg(long, default_value_t = false)]
     pub timestamps: bool,
 
     /// disable automatic pod list refresh
-    #[arg(long, default_value_t = Settings::default().disable_pods_refresh)]
+    #[arg(long, default_value_t = false)]
     pub disable_pods_refresh: bool,
+
     /// number of seconds between each pod list query (doesn't affect log line display)
-    #[arg(long, value_name = "seconds", default_value_t = Settings::default().loop_pause)]
+    #[arg(long, value_name = "seconds", default_value_t = 2)]
     pub loop_pause: u64,
 
     /// number of color to generate for the color cycle. if 0, it is later set for the number of result retuned by the first pod search
-    #[arg(long, value_name = "num", default_value_t = Settings::default().color_cycle_len)]
+    #[arg(long, value_name = "num", default_value_t = 0)]
     pub color_cycle_len: u8,
+
     /// hue (hsl) intervals to pick for color cycle generation
     /// format is $start-$end(,$start-$end)* where $start>=0 and $end<=359
     /// eg for powershell: 0-180,280-359
-    #[arg(long, value_name = "intervals", default_value_t = Settings::default().hue_intervals)]
+    #[arg(long, value_name = "intervals", default_value = "0-359")]
     pub hue_intervals: String,
+
     /// the color saturation (0-100)
-    #[arg(long, value_name = "sat", default_value_t = Settings::default().color_saturation)]
+    #[arg(long, value_name = "sat", default_value_t = 100)]
     pub color_saturation: u8,
+
     /// the color lightness (0-100)
-    #[arg(long, value_name = "light", default_value_t = Settings::default().color_lightness)]
+    #[arg(long, value_name = "light", default_value_t = 50)]
     pub color_lightness: u8,
 
     /// regex string to filter output that match
-    #[arg(long, value_name = "filter", default_value_t = Settings::default().filter)]
+    #[arg(long, value_name = "filter", default_value = "")]
     pub filter: String,
-    /// regex string to filter output that does not match
-    #[arg(long, value_name = "inv_filter", default_value_t = Settings::default().inv_filter)]
-    pub inv_filter: String,
-}
 
-impl Default for Settings {
-    fn default() -> Settings {
-        Settings {
-            pod_search: ".+".to_string(),
-            kubeconfig: "".to_string(),
-            namespaces: None,
-            previous: false,
-            since_seconds: 0,
-            tail_lines: 0,
-            timestamps: false,
-            disable_pods_refresh: false,
-            loop_pause: 2,
-            color_cycle_len: 0,
-            hue_intervals: "0-359".to_string(),
-            color_saturation: 100,
-            color_lightness: 50,
-            filter: "".to_string(),
-            inv_filter: "".to_string(),
-        }
-    }
+    /// regex string to filter output that does not match
+    #[arg(long, value_name = "inv_filter", default_value = "")]
+    pub inv_filter: String,
 }
 
 #[derive(Clone)]
