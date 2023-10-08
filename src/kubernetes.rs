@@ -90,6 +90,8 @@ pub async fn print_log(
     color_rgb: Rgb,
     running_pods: Arc<Mutex<HashMap<String, HashSet<String>>>>,
     params: LogParams,
+    filter: Option<Regex>,
+    inv_filter: Option<Regex>,
 ) -> Result<(), Errors> {
     let pod_count = {
         let mut running_pods_locked = running_pods.lock().await;
@@ -133,6 +135,23 @@ pub async fn print_log(
             Ok(content) => content,
             Err(err) => return Err(Errors::LogError(err.to_string())),
         };
+        match filter.clone() {
+            Some(reg) => {
+                if !reg.is_match(content) {
+                    continue;
+                }
+            }
+            None => {}
+        }
+
+        match inv_filter.clone() {
+            Some(reg) => {
+                if reg.is_match(content) {
+                    continue;
+                }
+            }
+            None => {}
+        }
 
         let (padding, print_namespace) = get_padding(running_pods.clone()).await;
         let message: String;

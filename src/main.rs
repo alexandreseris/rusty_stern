@@ -159,6 +159,8 @@ async fn main() -> Result<(), Errors> {
                     let stdout_lock = stdout_lock.clone();
                     let running_pods_lock = running_pods_lock.clone();
                     let params = params.clone();
+                    let filter = settings.filter.clone();
+                    let inv_filter = settings.inv_filter.clone();
                     tokio::spawn(async move {
                         let print_res = print_log(
                             stdout_lock.clone(),
@@ -168,6 +170,8 @@ async fn main() -> Result<(), Errors> {
                             color,
                             running_pods_lock.clone(),
                             params.clone(),
+                            filter.clone(),
+                            inv_filter.clone(),
                         )
                         .await;
                         match print_res {

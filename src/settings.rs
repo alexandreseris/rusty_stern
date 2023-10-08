@@ -64,6 +64,13 @@ pub struct Settings {
     /// the color lightness (0-100)
     #[arg(long, value_name = "light", default_value_t = Settings::default().color_lightness)]
     pub color_lightness: u8,
+
+    /// regex string to filter output that match
+    #[arg(long, value_name = "filter", default_value_t = Settings::default().filter)]
+    pub filter: String,
+    /// regex string to filter output that does not match
+    #[arg(long, value_name = "inv_filter", default_value_t = Settings::default().inv_filter)]
+    pub inv_filter: String,
 }
 
 impl Default for Settings {
@@ -83,6 +90,8 @@ impl Default for Settings {
             hue_intervals: "0-359".to_string(),
             color_saturation: 100,
             color_lightness: 50,
+            filter: "".to_string(),
+            inv_filter: "".to_string(),
         }
     }
 }
@@ -103,6 +112,8 @@ pub struct SettingsValidated {
     pub hue_intervals: Vec<HueInterval>,
     pub color_saturation: Saturation,
     pub color_lightness: Lightness,
+    pub filter: Option<Regex>,
+    pub inv_filter: Option<Regex>,
 }
 
 impl Settings {
@@ -135,6 +146,23 @@ impl Settings {
             Err(err) => return Err(Errors::Validation(err.to_string())),
         };
 
+        let filter = if self.filter == "".to_string() {
+            None
+        } else {
+            match Regex::new(self.filter.as_str()) {
+                Ok(val) => Some(val),
+                Err(err) => return Err(Errors::Validation(err.to_string())),
+            }
+        };
+        let inv_filter = if self.inv_filter == "".to_string() {
+            None
+        } else {
+            match Regex::new(self.inv_filter.as_str()) {
+                Ok(val) => Some(val),
+                Err(err) => return Err(Errors::Validation(err.to_string())),
+            }
+        };
+
         return Ok(SettingsValidated {
             pod_search,
             kubeconfig,
@@ -150,6 +178,8 @@ impl Settings {
             hue_intervals,
             color_saturation,
             color_lightness,
+            filter,
+            inv_filter,
         });
     }
 
