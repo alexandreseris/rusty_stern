@@ -123,7 +123,7 @@ impl Settings {
                 Err(err) => return Err(Errors::Other(err.to_string())),
             })
         };
-        let namespaces = match self.namespaces {
+        let namespaces = match self.namespaces.clone() {
             Some(namespaces) => namespaces,
             None => vec!["default".to_string()],
         };

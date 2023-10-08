@@ -108,15 +108,6 @@ pub struct Hsl {
     pub l: Lightness,
 }
 
-impl Hsl {
-    pub fn validate(self) -> Result<(), validator::ValidationErrors> {
-        self.h.validate()?;
-        self.s.validate()?;
-        self.l.validate()?;
-        Ok(())
-    }
-}
-
 impl FromStr for Hsl {
     type Err = Errors;
     fn from_str(string: &str) -> Result<Self, Self::Err> {
