@@ -3,13 +3,12 @@ use std::str::FromStr;
 use std::string::ToString;
 
 use clap::Parser;
-use colors_transform::{Color, Hsl, Rgb};
 use regex::Regex;
 
 use validator::Validate;
 
 use crate::{
-    display::{Hsl as CustomHsl, HueInterval, Lightness, Saturation},
+    display::{HueInterval, Lightness, Saturation},
     error::Errors,
 };
 
@@ -46,10 +45,6 @@ pub struct Settings {
     #[arg(long, value_name = "seconds", default_value_t = Settings::default().loop_pause)]
     pub loop_pause: u64,
 
-    /// default hsl color (format is hue,saturation,lightness), used for general and error messages
-    /// default hsl color (format is hue,saturation,lightness)
-    #[arg(long, value_name="hsl", default_value_t = Settings::default().default_color)]
-    pub default_color: String,
     /// number of color to generate for the color cycle. if 0, it is later set for the number of result retuned by the first pod search
     #[arg(long, value_name = "num", default_value_t = Settings::default().color_cycle_len)]
     pub color_cycle_len: u8,
@@ -85,7 +80,6 @@ impl Default for Settings {
             timestamps: false,
             disable_pods_refresh: false,
             loop_pause: 2,
-            default_color: "0,0,100".to_string(),
             color_cycle_len: 0,
             hue_intervals: "0-359".to_string(),
             color_saturation: 100,
@@ -107,7 +101,6 @@ pub struct SettingsValidated {
     pub timestamps: bool,
     pub disable_pods_refresh: bool,
     pub loop_pause: u64,
-    pub default_color: Rgb,
     pub color_cycle_len: u8,
     pub hue_intervals: Vec<HueInterval>,
     pub color_saturation: Saturation,
@@ -130,7 +123,6 @@ impl Settings {
                 Err(err) => return Err(Errors::Other(err.to_string())),
             })
         };
-        let default_color = self.get_default_color()?;
         let hue_intervals = self.get_hue_intervals()?;
         let color_saturation = Saturation {
             value: self.color_saturation,
@@ -173,7 +165,6 @@ impl Settings {
             timestamps: self.timestamps,
             disable_pods_refresh: self.disable_pods_refresh,
             loop_pause: self.loop_pause,
-            default_color,
             color_cycle_len: self.color_cycle_len,
             hue_intervals,
             color_saturation,
@@ -198,16 +189,5 @@ impl Settings {
             intervals.push(interval);
         }
         return Ok(intervals);
-    }
-
-    pub fn get_default_color(&self) -> Result<Rgb, Errors> {
-        let hsl = CustomHsl::from_str(self.default_color.as_str())?;
-        match hsl.clone().validate() {
-            Ok(val) => val,
-            Err(err) => return Err(Errors::Validation(err.to_string())),
-        };
-        let lib_hsl = Hsl::from(hsl.h.value as f32, hsl.s.value as f32, hsl.l.value as f32);
-        let rgb = lib_hsl.to_rgb();
-        return Ok(rgb);
     }
 }

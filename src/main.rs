@@ -106,7 +106,7 @@ async fn main() -> Result<(), Errors> {
 
     print_color(
         stdout_lock.clone(),
-        settings.default_color,
+        None,
         format!(
             "initial search found {} pods across {} namespaces",
             get_pod_count(&namespaces),
@@ -132,7 +132,7 @@ async fn main() -> Result<(), Errors> {
         }
         let pods_cnt = get_pod_count(&namespaces);
         if pods_cnt == 0 && !no_pod_found {
-            eprint_color(stdout_lock.clone(), settings.default_color, "no pod found :(".to_string()).await?;
+            eprint_color(stdout_lock.clone(), "no pod found :(".to_string()).await?;
             tokio::time::sleep(tokio::time::Duration::from_millis(settings.loop_pause * 1000)).await;
             no_pod_found = true;
         } else if pods_cnt != 0 {
@@ -179,7 +179,7 @@ async fn main() -> Result<(), Errors> {
                             Ok(_) => Ok(()),
                             Err(err) => {
                                 let error = Errors::Other(err.to_string());
-                                eprint_color(stdout_lock, settings.default_color, error.to_string()).await?;
+                                eprint_color(stdout_lock, error.to_string()).await?;
                                 return Err(error);
                             }
                         }

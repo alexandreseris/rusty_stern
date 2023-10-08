@@ -131,19 +131,28 @@ impl FromStr for Hsl {
     }
 }
 
-async fn _print_color(std: &mut StandardStream, color_rgb: Rgb, message: String) -> Result<(), Errors> {
+async fn _print_color(std: &mut StandardStream, color_rgb: Option<Rgb>, message: String) -> Result<(), Errors> {
     let mut message = message;
     if message.len() > 0 && message.chars().last().unwrap().to_string() != "\n" {
         message = format!("{message}\n");
     }
-    match std.set_color(ColorSpec::new().set_fg(Some(Color::Rgb(
-        color_rgb.get_red() as u8,
-        color_rgb.get_green() as u8,
-        color_rgb.get_blue() as u8,
-    )))) {
-        Ok(val) => val,
-        Err(err) => return Err(Errors::StdErr(err.to_string())),
-    };
+    match color_rgb {
+        Some(color_rgb) => {
+            match std.set_color(ColorSpec::new().set_fg(Some(Color::Rgb(
+                color_rgb.get_red() as u8,
+                color_rgb.get_green() as u8,
+                color_rgb.get_blue() as u8,
+            )))) {
+                Ok(val) => val,
+                Err(err) => return Err(Errors::StdErr(err.to_string())),
+            };
+        }
+
+        None => match std.set_color(&ColorSpec::default()) {
+            Ok(val) => val,
+            Err(err) => return Err(Errors::StdErr(err.to_string())),
+        },
+    }
     match std.write_fmt(format_args!("{message}")) {
         Ok(val) => val,
         Err(err) => return Err(Errors::StdErr(err.to_string())),
@@ -151,16 +160,16 @@ async fn _print_color(std: &mut StandardStream, color_rgb: Rgb, message: String)
     Ok(())
 }
 
-pub async fn print_color(stdout: Arc<Mutex<(StandardStream, StandardStream)>>, color_rgb: Rgb, message: String) -> Result<(), Errors> {
+pub async fn print_color(stdout: Arc<Mutex<(StandardStream, StandardStream)>>, color_rgb: Option<Rgb>, message: String) -> Result<(), Errors> {
     let mut stdout_locked = stdout.lock().await;
     let std = &mut stdout_locked.0;
     _print_color(std, color_rgb, message).await
 }
 
-pub async fn eprint_color(stdout: Arc<Mutex<(StandardStream, StandardStream)>>, color_rgb: Rgb, message: String) -> Result<(), Errors> {
+pub async fn eprint_color(stdout: Arc<Mutex<(StandardStream, StandardStream)>>, message: String) -> Result<(), Errors> {
     let mut stdout_locked = stdout.lock().await;
     let std = &mut stdout_locked.1;
-    _print_color(std, color_rgb, message).await
+    _print_color(std, None, message).await
 }
 
 pub fn pick_color(color_cycle: &mut Cycle<std::vec::IntoIter<Rgb>>) -> Rgb {
