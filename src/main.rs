@@ -116,8 +116,7 @@ async fn main() -> Result<(), Errors> {
     .await?;
 
     if color_cycle_len == 0 {
-        let pods_cnt = get_pod_count(&namespaces);
-        color_cycle_len = pods_cnt as u8 + (pods_cnt as f32 * 0.5 as f32) as u8;
+        color_cycle_len = get_pod_count(&namespaces) as u8;
     }
     let mut color_cycle = build_color_cycle(
         color_cycle_len,
@@ -127,6 +126,10 @@ async fn main() -> Result<(), Errors> {
     )?;
     let mut no_pod_found = false;
     loop {
+        if !settings.disable_pods_refresh {
+            tokio::time::sleep(tokio::time::Duration::from_millis(settings.loop_pause * 1000)).await;
+            refresh_namespaces_pods(&mut namespaces, settings.pod_search.clone()).await?;
+        }
         let pods_cnt = get_pod_count(&namespaces);
         if pods_cnt == 0 && !no_pod_found {
             eprint_color(stdout_lock.clone(), settings.default_color, "no pod found :(".to_string()).await?;
@@ -178,10 +181,6 @@ async fn main() -> Result<(), Errors> {
                     });
                 }
             }
-        }
-        if !settings.disable_pods_refresh {
-            tokio::time::sleep(tokio::time::Duration::from_millis(settings.loop_pause * 1000)).await;
-            refresh_namespaces_pods(&mut namespaces, settings.pod_search.clone()).await?;
         }
     }
 }

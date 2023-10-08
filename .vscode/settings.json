@@ -2,10 +2,10 @@
     // windows settings:
     // -- add openssl lib installed vcpkg to path for terminal and cargo
     "terminal.integrated.env.windows": {
-        "OPENSSL_DIR": "vcpkgpatch\\installed\\x64-windows-static"
+        "OPENSSL_DIR": "vcpkgpath\\installed\\x64-windows-static"
     },
     "rust-analyzer.cargo.extraEnv": {
-        "OPENSSL_DIR": "vcpkgpatch\\installed\\x64-windows-static"
+        "OPENSSL_DIR": "vcpkgpath\\installed\\x64-windows-static"
     },
     // general settings
     "terminal.integrated.cwd": "${workspaceFolder}",

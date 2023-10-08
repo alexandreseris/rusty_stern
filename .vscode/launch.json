@@ -2,6 +2,12 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Launch lldb",
+            "type": "lldb", // requiere codelldb extension: https://marketplace.visualstudio.com/items?itemName=vadimcn.vscode-lldb
+            "request": "launch",
+            "program": "${workspaceRoot}/target/debug/rusty_stern.exe"
+        },
+        {
             "name": "Launch cppvsdbg",
             "type": "cppvsdbg", // requiere c/c++ extension: https://marketplace.visualstudio.com/items?itemName=ms-vscode.cpptools
             "request": "launch",

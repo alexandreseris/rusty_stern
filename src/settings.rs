@@ -50,7 +50,7 @@ pub struct Settings {
     /// default hsl color (format is hue,saturation,lightness)
     #[arg(long, value_name="hsl", default_value_t = Settings::default().default_color)]
     pub default_color: String,
-    /// number of color to generate for the color cycle. if 0, it is later set for about the number of result retuned by the first pod search
+    /// number of color to generate for the color cycle. if 0, it is later set for the number of result retuned by the first pod search
     #[arg(long, value_name = "num", default_value_t = Settings::default().color_cycle_len)]
     pub color_cycle_len: u8,
     /// hue (hsl) intervals to pick for color cycle generation
