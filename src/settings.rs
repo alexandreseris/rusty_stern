@@ -23,7 +23,7 @@ pub struct Settings {
     pub kubeconfig: String,
     /// kubernetes namespace to use. if the option is not passed, use the default namespace
     #[arg(short, long, value_name = "nmspc")]
-    pub namespace: Option<Vec<String>>,
+    pub namespaces: Option<Vec<String>>,
 
     /// retrieve previous terminated container logs
     #[arg(long, default_value_t = Settings::default().previous)]
@@ -73,7 +73,7 @@ impl Default for Settings {
         Settings {
             pod_search: ".+".to_string(),
             kubeconfig: "".to_string(),
-            namespace: None,
+            namespaces: None,
             previous: false,
             since_seconds: 0,
             tail_lines: 0,
@@ -94,7 +94,7 @@ impl Default for Settings {
 pub struct SettingsValidated {
     pub pod_search: Regex,
     pub kubeconfig: Option<PathBuf>,
-    pub namespace: Option<Vec<String>>,
+    pub namespaces: Vec<String>,
     pub previous: bool,
     pub since_seconds: i64,
     pub tail_lines: i64,
@@ -122,6 +122,10 @@ impl Settings {
                 Ok(val) => val,
                 Err(err) => return Err(Errors::Other(err.to_string())),
             })
+        };
+        let namespaces = match self.namespaces {
+            Some(namespaces) => namespaces,
+            None => vec!["default".to_string()],
         };
         let hue_intervals = self.get_hue_intervals()?;
         let color_saturation = Saturation {
@@ -158,7 +162,7 @@ impl Settings {
         return Ok(SettingsValidated {
             pod_search,
             kubeconfig,
-            namespace: self.namespace,
+            namespaces: namespaces,
             previous: self.previous,
             since_seconds: self.since_seconds,
             tail_lines: self.tail_lines,

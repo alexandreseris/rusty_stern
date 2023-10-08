@@ -86,19 +86,10 @@ async fn main() -> Result<(), Errors> {
 
     // namespace => (api, [pod, ...])
     let mut namespaces: HashMap<String, (Api<Pod>, Vec<Pod>)> = HashMap::new();
-    match settings.namespace {
-        Some(val) => {
-            for namespace in val {
-                namespaces.insert(namespace.clone(), (Api::namespaced(client.clone(), &namespace.clone()), Vec::new()));
-                running_pods.insert(namespace.clone(), HashSet::new());
-            }
-        }
-        None => {
-            let namespace = "default".to_string();
-            namespaces.insert(namespace.clone(), (Api::default_namespaced(client), Vec::new()));
-            running_pods.insert(namespace.clone(), HashSet::new());
-        }
-    };
+    for namespace in settings.namespaces {
+        namespaces.insert(namespace.clone(), (Api::namespaced(client.clone(), &namespace.clone()), Vec::new()));
+        running_pods.insert(namespace.clone(), HashSet::new());
+    }
 
     let running_pods_lock = Arc::new(Mutex::new(running_pods));
 
