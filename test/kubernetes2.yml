@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rustysternlongername
+  labels:
+    app: rustysternlongername
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: rustysternlongername
+  template:
+    metadata:
+      labels:
+        app: rustysternlongername
+    spec:
+      containers:
+      - name: alpine
+        image: alpine
+        command: ["sh"]
+        args: ["-c", "i=1; while true; do echo $(date) ------ $i; sleep $(expr $RANDOM % 3 + 1); i=$(expr $i + 1); done"]

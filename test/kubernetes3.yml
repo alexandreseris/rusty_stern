@@ -1,21 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: rustystern
+  name: rustysternfast
   labels:
-    app: rustystern
+    app: rustysternfast
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
-      app: rustystern
+      app: rustysternfast
   template:
     metadata:
       labels:
-        app: rustystern
+        app: rustysternfast
     spec:
       containers:
       - name: alpine
         image: alpine
         command: ["sh"]
-        args: ["-c", "i=1; while true; do echo $(date) ------ $i; sleep 1; i=$(expr $i + 1); done"]
+        args: ["-c", "i=1; while true; do echo $(date) ------ $i; sleep 0.01; i=$(expr $i + 1); done"]

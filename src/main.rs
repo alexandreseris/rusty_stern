@@ -1,177 +1,81 @@
-mod display;
+mod display_v2;
 mod error;
-mod kubernetes;
-mod settings;
+mod kubernetes_v2;
+mod settings_v2;
+mod types;
 
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
-
-use k8s_openapi::api::core::v1::Pod;
-use kube::{
-    api::LogParams,
-    config::{KubeConfigOptions, Kubeconfig},
-    Api, Client, Config,
-};
-use termcolor::{ColorChoice, StandardStream};
+use crate::display_v2 as display;
+use crate::error::Errors;
+use crate::kubernetes_v2 as kubernetes;
+use crate::settings_v2 as settings;
 use tokio;
-use tokio::sync::Mutex;
 
-use display::{build_color_cycle, eprint_color, pick_color, print_color};
-use error::Errors;
-use kubernetes::{get_pod_count, get_pod_name, get_pod_status, print_log, refresh_namespaces_pods};
-use settings::Settings;
-
-#[allow(deprecated)]
 #[tokio::main]
 async fn main() -> Result<(), Errors> {
-    let stdout = StandardStream::stdout(ColorChoice::Always);
-    let stderr = StandardStream::stderr(ColorChoice::Always);
-    let stdouterr_lock = Arc::new(Mutex::new((stdout, stderr)));
+    let streams: display_v2::Streams = display::new_streams();
+    let streams_lock = display::new_streams_mutex(streams);
 
-    let settings = Settings::do_parse();
+    let settings = settings::Settings::do_parse();
+    let settings = settings.to_validated()?;
 
-    let settings = match settings.to_validated() {
-        Ok(val) => val,
-        Err(err) => return Err(Errors::Validation(err.to_string())),
-    };
+    let log_params = kubernetes::new_log_param(&settings);
+    let client = kubernetes::new_client(&settings).await?;
 
-    let params = LogParams {
-        container: None,
-        follow: true,
-        limit_bytes: None,
-        pretty: false,
-        previous: settings.previous,
-        since_seconds: {
-            if settings.since_seconds == 0 {
-                None
-            } else {
-                Some(settings.since_seconds)
-            }
-        },
-        tail_lines: Some(settings.tail_lines),
-        timestamps: settings.timestamps,
-    };
+    let namespaces = kubernetes::Namespaces::new(&client, &settings.namespaces);
+    let pod_cnt = namespaces.get_pods_cnt(&settings.pod_search).await?;
+    let mut colors_params = display::ColorParams::new(&settings, pod_cnt);
+    let colors = display::Colors::new(&mut colors_params);
+    let pods = kubernetes::Pods::new(namespaces.clone(), &settings.pod_search, colors).await?;
+    let pods_lock = pods.to_mutex();
 
-    let mut conf = match settings.kubeconfig {
-        Some(val) => {
-            let kconf = match Kubeconfig::read_from(val) {
-                Ok(val) => val,
-                Err(err) => return Err(Errors::Kubernetes("failled to read config file".to_string(), err.to_string())),
-            };
-            let kconfopt = &KubeConfigOptions::default();
-            match Config::from_custom_kubeconfig(kconf, kconfopt).await {
-                Ok(val) => val,
-                Err(err) => return Err(Errors::Kubernetes("failled to parse config file".to_string(), err.to_string())),
-            }
-        }
-        None => match Config::infer().await {
-            Ok(val) => val,
-            Err(err) => return Err(Errors::Kubernetes("failled to get default config".to_string(), err.to_string())),
-        },
-    };
-    conf.read_timeout = None;
-    conf.write_timeout = None;
-    conf.connect_timeout = None;
-    conf.timeout = None;
-
-    let client = match Client::try_from(conf) {
-        Ok(val) => val,
-        Err(err) => return Err(Errors::Kubernetes("failled to use kubernetes configuration".to_string(), err.to_string())),
-    };
-
-    // namespace => [pod_name, ...]
-    let mut running_pods: HashMap<String, HashSet<String>> = HashMap::new();
-
-    // namespace => (api, [pod, ...])
-    let mut namespaces: HashMap<String, (Api<Pod>, Vec<Pod>)> = HashMap::new();
-    for namespace in settings.namespaces {
-        namespaces.insert(namespace.clone(), (Api::namespaced(client.clone(), &namespace.clone()), Vec::new()));
-        running_pods.insert(namespace.clone(), HashSet::new());
+    {
+        let mut streams = streams_lock.lock().await;
+        display::print_color(
+            &mut streams.out,
+            None,
+            format!("initial search found {} pods across {} namespaces", pod_cnt, namespaces.items.len()),
+        )
+        .await?;
     }
-
-    let running_pods_lock = Arc::new(Mutex::new(running_pods));
-
-    refresh_namespaces_pods(&mut namespaces, settings.pod_search.clone()).await?;
-
-    print_color(
-        stdouterr_lock.clone(),
-        None,
-        format!(
-            "initial search found {} pods across {} namespaces",
-            get_pod_count(&namespaces),
-            namespaces.len()
-        ),
-    )
-    .await?;
-
-    let color_cycle_len = get_pod_count(&namespaces) as u8;
-
-    let mut color_cycle = build_color_cycle(
-        color_cycle_len,
-        settings.color_saturation,
-        settings.color_lightness,
-        settings.hue_intervals,
-    )?;
-    let mut no_pod_found = false;
+    let loop_pause = settings.loop_pause;
+    let mut no_pod_found = pod_cnt == 0;
     loop {
-        tokio::time::sleep(tokio::time::Duration::from_millis(settings.loop_pause * 1000)).await;
-        refresh_namespaces_pods(&mut namespaces, settings.pod_search.clone()).await?;
-        let pods_cnt = get_pod_count(&namespaces);
-        if pods_cnt == 0 && !no_pod_found {
-            eprint_color(stdouterr_lock.clone(), "no pod found :(".to_string()).await?;
-            tokio::time::sleep(tokio::time::Duration::from_millis(settings.loop_pause * 1000)).await;
-            no_pod_found = true;
-        } else if pods_cnt != 0 {
-            no_pod_found = false;
-        }
         if no_pod_found {
+            {
+                let mut streams = streams_lock.lock().await;
+                display::print_color(&mut streams.err, None, "no pod found :(".to_string()).await?;
+            }
             continue;
         }
-        for (namespace, (pod_api, pods)) in namespaces.clone() {
-            for pod in pods {
-                let name = get_pod_name(pod.clone())?;
-                let pod_is_already_running = {
-                    let running_pods_locked = running_pods_lock.lock().await;
-                    match running_pods_locked.get(&namespace) {
-                        Some(val) => val.contains(name.as_str()),
-                        None => return Err(Errors::Other("shared running pods have inconsistent state".to_string())),
-                    }
-                };
-                let phase = get_pod_status(pod)?;
-                if !pod_is_already_running && phase == "Running".to_string() {
-                    let pods_api_cp = pod_api.clone();
-                    let name_cp = name.clone();
-                    let namespace_cp = namespace.clone();
-                    let color = pick_color(&mut color_cycle).clone();
-                    let stdout_lock = stdouterr_lock.clone();
-                    let running_pods_lock = running_pods_lock.clone();
-                    let params = params.clone();
-                    let filter = settings.filter.clone();
-                    let inv_filter = settings.inv_filter.clone();
-                    tokio::spawn(async move {
-                        let print_res = print_log(
-                            stdout_lock.clone(),
-                            pods_api_cp.clone(),
-                            name_cp,
-                            namespace_cp,
-                            color,
-                            running_pods_lock.clone(),
-                            params.clone(),
-                            filter.clone(),
-                            inv_filter.clone(),
-                        )
-                        .await;
-                        match print_res {
-                            Ok(_) => Ok(()),
-                            Err(err) => {
-                                let error = Errors::Other(err.to_string());
-                                eprint_color(stdout_lock, error.to_string()).await?;
-                                return Err(error);
-                            }
-                        }
-                    });
-                }
+        let pods = pods.clone();
+        for pod in pods.clone().items {
+            if !pod.is_running().unwrap_or(false) {
+                continue;
             }
+            let log_params = log_params.clone();
+            let streams_lock = streams_lock.clone();
+            let pods_lock = pods_lock.clone();
+            let settings = settings.clone();
+            tokio::spawn(async move {
+                let print_res = pod.print_logs(log_params, settings, pods_lock, streams_lock.clone()).await;
+                match print_res {
+                    Ok(_) => Ok(()),
+                    Err(err) => {
+                        let error = Errors::Other(err.to_string());
+                        {
+                            let mut streams = streams_lock.lock().await;
+                            display::print_color(&mut streams.err, None, error.to_string()).await?;
+                        }
+                        return Err(error);
+                    }
+                }
+            });
+        }
+        no_pod_found = false;
+        tokio::time::sleep(tokio::time::Duration::from_millis(loop_pause * 1000)).await;
+        {
+            let mut pods = pods_lock.lock().await;
+            pods.refresh().await?;
         }
     }
 }

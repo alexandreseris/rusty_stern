@@ -8,7 +8,7 @@ use regex::Regex;
 use validator::Validate;
 
 use crate::{
-    display::{HueInterval, Lightness, Saturation},
+    display_v2::{HueInterval, Lightness, Saturation},
     error::Errors,
 };
 

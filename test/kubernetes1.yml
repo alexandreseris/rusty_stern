@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rustystern
+  labels:
+    app: rustystern
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rustystern
+  template:
+    metadata:
+      labels:
+        app: rustystern
+    spec:
+      containers:
+      - name: alpine
+        image: alpine
+        command: ["sh"]
+        args: ["-c", "i=1; while true; do echo $(date) ------ $i; sleep 1; i=$(expr $i + 1); done"]
