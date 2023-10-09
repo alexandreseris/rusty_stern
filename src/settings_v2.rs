@@ -32,12 +32,12 @@ pub struct Settings {
     pub previous: bool,
 
     /// a relative time in seconds before the current time from which to show logs
-    #[arg(long, value_name = "seconds", default_value_t = 0)]
-    pub since_seconds: i64,
+    #[arg(long, value_name = "seconds")]
+    pub since_seconds: Option<i64>,
 
     /// number of lines from the end of the logs to show
-    #[arg(long, value_name = "line_cnt", default_value_t = 0)]
-    pub tail_lines: i64,
+    #[arg(long, value_name = "line_cnt")]
+    pub tail_lines: Option<i64>,
 
     /// show timestamp at the begining of each log line
     #[arg(long, default_value_t = false)]
@@ -76,8 +76,8 @@ pub struct SettingsValidated {
     pub kubeconfig: Option<PathBuf>,
     pub namespaces: Vec<String>,
     pub previous: bool,
-    pub since_seconds: i64,
-    pub tail_lines: i64,
+    pub since_seconds: Option<i64>,
+    pub tail_lines: Option<i64>,
     pub timestamps: bool,
     pub loop_pause: u64,
     pub hue_intervals: Vec<HueInterval>,

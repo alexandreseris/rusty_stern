@@ -28,6 +28,8 @@ async fn main() -> Result<(), Errors> {
     let pods = kubernetes::Pods::new(namespaces.clone(), &settings.pod_search, colors).await?;
     let pods_lock = pods.to_mutex();
 
+    let running_pods = kubernetes::new_running_pods();
+
     {
         let mut streams = streams_lock.lock().await;
         display::print_color(
@@ -47,24 +49,74 @@ async fn main() -> Result<(), Errors> {
             }
             continue;
         }
-        let pods = pods.clone();
-        for pod in pods.items {
-            if !pod.is_running().unwrap_or(false) {
+        let pod_list = {
+            let pods = pods_lock.lock().await;
+            pods.items.clone()
+        };
+        let running_pods = running_pods.clone();
+        for pod in pod_list {
+            let pod_id = format!("{}/{}", pod.namespace.name, pod.name);
+            if !pod.is_running() {
+                {
+                    let mut pods = pods_lock.lock().await;
+                    pods.remove_pod(&pod).await;
+                    pods.colors.set_color_to_unused(pod.color);
+                }
+                {
+                    let mut running_pods = running_pods.lock().await;
+                    running_pods.remove(&pod_id);
+                }
                 continue;
+            }
+
+            let already_running = {
+                let running_pods = running_pods.lock().await;
+                running_pods.get(&pod_id).is_some()
+            };
+            if already_running {
+                continue;
+            }
+            {
+                let mut running_pods = running_pods.lock().await;
+                running_pods.insert(pod_id.clone());
             }
             let log_params = log_params.clone();
             let streams_lock = streams_lock.clone();
             let pods_lock = pods_lock.clone();
             let settings = settings.clone();
+            let running_pods = running_pods.clone();
+
             tokio::spawn(async move {
-                let print_res = pod.print_logs(log_params, settings, pods_lock, streams_lock.clone()).await;
+                {
+                    let mut streams = streams_lock.lock().await;
+                    display::print_color(&mut streams.out, Some(pod.color), format!("+++ {} just started", pod_id)).await?;
+                }
+
+                let print_res = pod.print_logs(log_params, settings, pods_lock.clone(), streams_lock.clone()).await;
+                {
+                    let mut pods = pods_lock.lock().await;
+                    pods.remove_pod(&pod).await;
+                    pods.colors.set_color_to_unused(pod.color);
+                }
+                {
+                    let mut running_pods = running_pods.lock().await;
+                    running_pods.remove(&pod_id);
+                }
                 match print_res {
-                    Ok(_) => Ok(()),
+                    Ok(_) => Ok({
+                        let mut streams = streams_lock.lock().await;
+                        display::print_color(&mut streams.out, Some(pod.color), format!("--- {} gracefully stopped (maybe)", pod_id)).await?;
+                    }),
                     Err(err) => {
                         let error = Errors::Other(err.to_string());
                         {
                             let mut streams = streams_lock.lock().await;
-                            display::print_color(&mut streams.err, None, error.to_string()).await?;
+                            display::print_color(
+                                &mut streams.err,
+                                Some(pod.color),
+                                format!("--- {} failled miserably ({})", pod_id, error.to_string()),
+                            )
+                            .await?;
                         }
                         return Err(error);
                     }

@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use colors_transform::Rgb;
-use futures::StreamExt;
+use futures::{AsyncBufReadExt, TryStreamExt};
 use k8s_openapi::api::core::v1::Pod as ApiPod;
 use kube::api::ListParams;
 use kube::config::{KubeConfigOptions, Kubeconfig};
@@ -80,14 +80,36 @@ impl PartialEq for Pod {
 }
 impl Eq for Pod {}
 
-impl Pod {
-    pub fn is_running(&self) -> Option<bool> {
-        if let Some(status) = &self.pod_api.status {
-            if let Some(phase) = &status.phase {
-                return Some(phase == "Running");
-            }
+pub fn get_pod_status(pod: &ApiPod) -> Option<&String> {
+    if let Some(status) = &pod.status {
+        if let Some(phase) = &status.phase {
+            return Some(phase);
         }
-        return None;
+    }
+    return None;
+}
+
+pub fn is_pod_running(pod: &ApiPod) -> bool {
+    if let Some(phase) = get_pod_status(pod) {
+        return phase == "Running";
+    }
+    return false;
+}
+
+impl Pod {
+    #[allow(dead_code)]
+    pub async fn refresh(&mut self) -> Result<(), Errors> {
+        self.pod_api = self
+            .namespace
+            .api
+            .get(&self.name)
+            .await
+            .map_err(|err| Errors::Kubernetes("refresh pod".to_string(), err.to_string()))?;
+        return Ok(());
+    }
+
+    pub fn is_running(&self) -> bool {
+        return is_pod_running(&self.pod_api);
     }
 
     pub async fn print_logs(
@@ -98,7 +120,7 @@ impl Pod {
         streams: types::ArcMutex<display::Streams>,
     ) -> Result<(), Errors> {
         let mut stream = match self.namespace.api.log_stream(&self.name, &log_params).await {
-            Ok(stream) => stream,
+            Ok(stream) => stream.lines(),
             Err(err) => {
                 let mut pods = pods.lock().await;
                 pods.remove_pod(self).await;
@@ -106,48 +128,17 @@ impl Pod {
                 return Err(Errors::LogError(err.to_string()));
             }
         };
-        let mut line_bytes: bytes::Bytes;
-        let empty_bytes = &bytes::Bytes::from("");
-        let mut error = None;
-
-        loop {
-            let next = match stream.next().await {
-                Some(val) => val,
-                None => Ok(empty_bytes.clone()),
-            };
-            line_bytes = match next {
-                Ok(val) => val,
-                Err(err) => {
-                    error = Some(Errors::Kubernetes("retrieving logs".to_string(), err.to_string()));
-                    break;
-                }
-            };
-            if line_bytes == empty_bytes {
-                if self.is_running().unwrap_or(false) {
-                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                    continue;
-                }
-                break;
-            }
-            let content = match std::str::from_utf8(line_bytes.iter().as_slice()) {
-                Ok(content) => content,
-                Err(err) => {
-                    error = Some(Errors::LogError(err.to_string()));
-                    break;
-                }
-            };
-
+        while let Some(line) = stream.try_next().await.map_err(|err| Errors::LogError(err.to_string()))? {
             if let Some(reg) = &settings.filter {
-                if !reg.is_match(content) {
+                if !reg.is_match(&line) {
                     continue;
                 }
             }
             if let Some(reg) = &settings.inv_filter {
-                if reg.is_match(content) {
+                if reg.is_match(&line) {
                     continue;
                 }
             }
-
             let padding_cnt;
             let namespace: String;
             {
@@ -164,33 +155,12 @@ impl Pod {
                 };
             }
             let padding_str = " ".repeat(padding_cnt);
-            let message = format!("{namespace}{}:{padding_str} {content}", &self.name);
-
+            let message = format!("{namespace}{}:{padding_str} {line}", &self.name);
             {
                 let mut streams = streams.lock().await;
                 let stdout = &mut streams.out;
                 display::print_color(stdout, Some(self.color), message).await?;
             }
-        }
-
-        let error_reason = match error {
-            Some(value) => value.to_string(),
-            None => "unknown".to_string(),
-        };
-        {
-            let mut streams = streams.lock().await;
-            let stderr = &mut streams.err;
-            display::print_color(
-                stderr,
-                Some(self.color),
-                format!("--- pod {}/{} ended (reason: {error_reason})", self.name, self.namespace.name),
-            )
-            .await?;
-        }
-        {
-            let mut pods = pods.lock().await;
-            pods.remove_pod(self).await;
-            pods.colors.set_color_to_unused(self.color);
         }
         return Ok(());
     }
@@ -244,7 +214,7 @@ impl Pods {
             };
             for pod in pod_list {
                 let name = get_pod_name(&pod);
-                if pod_search.is_match(name.as_str()) {
+                if pod_search.is_match(name.as_str()) && is_pod_running(&pod) {
                     pods_mut.push(Pod {
                         name: name.clone(),
                         pod_api: pod,
@@ -301,7 +271,7 @@ impl Pods {
             };
             for pod in pod_list {
                 let name = get_pod_name(&pod);
-                if self.pod_search.is_match(name.as_str()) && !self.pod_already_exists(&name, namespace) {
+                if self.pod_search.is_match(name.as_str()) && is_pod_running(&pod) && !self.pod_already_exists(&name, namespace) {
                     found_one = true;
                     self.items.push(Pod {
                         name: name.clone(),
@@ -322,19 +292,13 @@ impl Pods {
 pub fn new_log_param(settings: &crate::settings_v2::SettingsValidated) -> kube::api::LogParams {
     return kube::api::LogParams {
         container: None,
-        follow: true,
         limit_bytes: None,
         pretty: false,
+        follow: true,
         previous: settings.previous,
-        since_seconds: {
-            if settings.since_seconds == 0 {
-                None
-            } else {
-                Some(settings.since_seconds)
-            }
-        },
-        tail_lines: Some(settings.tail_lines),
         timestamps: settings.timestamps,
+        since_seconds: settings.since_seconds,
+        tail_lines: settings.tail_lines,
     };
 }
 
@@ -365,4 +329,9 @@ pub async fn new_client(settings: &crate::settings_v2::SettingsValidated) -> Res
         Err(err) => return Err(Errors::Kubernetes("using kubernetes configuration".to_string(), err.to_string())),
     };
     return Ok(client);
+}
+
+pub fn new_running_pods() -> types::ArcMutex<HashSet<String>> {
+    let hash = HashSet::new();
+    return std::sync::Arc::new(tokio::sync::Mutex::new(hash));
 }

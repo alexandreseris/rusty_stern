@@ -216,7 +216,7 @@ impl Colors {
 
     pub fn set_color_to_unused(&mut self, color: colors_transform::Rgb) {
         self.used
-            .remove(self.used.iter().position(|item| item.as_tuple() == color.as_tuple()).unwrap()); // item cannot missing from used
+            .remove(self.used.iter().position(|item| item.as_tuple() == color.as_tuple()).unwrap_or(0));
         self.available.push(color);
     }
 }
