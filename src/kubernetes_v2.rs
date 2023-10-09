@@ -99,11 +99,17 @@ impl Pod {
     ) -> Result<(), Errors> {
         let mut stream = match self.namespace.api.log_stream(&self.name, &log_params).await {
             Ok(stream) => stream,
-            Err(err) => return Err(Errors::LogError(err.to_string())),
+            Err(err) => {
+                let mut pods = pods.lock().await;
+                pods.remove_pod(self).await;
+                pods.colors.set_color_to_unused(self.color);
+                return Err(Errors::LogError(err.to_string()));
+            }
         };
         let mut line_bytes: bytes::Bytes;
         let empty_bytes = &bytes::Bytes::from("");
         let mut error = None;
+
         loop {
             let next = match stream.next().await {
                 Some(val) => val,
@@ -112,19 +118,23 @@ impl Pod {
             line_bytes = match next {
                 Ok(val) => val,
                 Err(err) => {
-                    error = Some(Errors::Kubernetes("failled to retrieve logs".to_string(), err.to_string()));
+                    error = Some(Errors::Kubernetes("retrieving logs".to_string(), err.to_string()));
                     break;
                 }
             };
             if line_bytes == empty_bytes {
                 if self.is_running().unwrap_or(false) {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                     continue;
                 }
                 break;
             }
             let content = match std::str::from_utf8(line_bytes.iter().as_slice()) {
                 Ok(content) => content,
-                Err(err) => return Err(Errors::LogError(err.to_string())),
+                Err(err) => {
+                    error = Some(Errors::LogError(err.to_string()));
+                    break;
+                }
             };
 
             if let Some(reg) = &settings.filter {

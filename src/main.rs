@@ -48,7 +48,7 @@ async fn main() -> Result<(), Errors> {
             continue;
         }
         let pods = pods.clone();
-        for pod in pods.clone().items {
+        for pod in pods.items {
             if !pod.is_running().unwrap_or(false) {
                 continue;
             }
