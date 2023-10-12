@@ -256,17 +256,27 @@ pub async fn print_color(std: &mut termcolor::StandardStream, color_rgb: Option<
     Ok(())
 }
 
+// should be nice to use this when ctrl + c
 #[allow(dead_code)]
-pub async fn reset_terminal_colors(stdout: &mut termcolor::StandardStream, stderr: &mut termcolor::StandardStream) -> Result<(), Errors> {
-    stdout
+pub async fn reset_terminal_colors(streams: &types::ArcMutex<Streams>) -> Result<(), Errors> {
+    let mut streams = streams.lock().await;
+    streams
+        .out
         .set_color(&termcolor::ColorSpec::default())
         .map_err(|err| Errors::StdErr(err.to_string()))?;
-    stderr
+    streams
+        .err
         .set_color(&termcolor::ColorSpec::default())
         .map_err(|err| Errors::StdErr(err.to_string()))?;
 
-    stdout.write_fmt(format_args!("bye")).map_err(|err| Errors::StdErr(err.to_string()))?;
-    stderr.write_fmt(format_args!("bye")).map_err(|err| Errors::StdErr(err.to_string()))?;
+    streams
+        .out
+        .write_fmt(format_args!("bye"))
+        .map_err(|err| Errors::StdErr(err.to_string()))?;
+    streams
+        .err
+        .write_fmt(format_args!("bye"))
+        .map_err(|err| Errors::StdErr(err.to_string()))?;
     Ok(())
 }
 
