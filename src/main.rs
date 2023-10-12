@@ -18,7 +18,7 @@ async fn main() -> Result<(), Errors> {
     let settings = settings::Settings::do_parse();
     let settings = settings.to_validated()?;
 
-    let log_params = kubernetes::new_log_param(&settings);
+    let log_params = kubernetes::new_log_param(&settings, false);
     let client = kubernetes::new_client(&settings).await?;
 
     let namespaces = kubernetes::Namespaces::new(&client, &settings.namespaces);
@@ -39,6 +39,22 @@ async fn main() -> Result<(), Errors> {
         )
         .await?;
     }
+    if settings.is_previous_lines() {
+        let previous_lines_settings = kubernetes::new_log_param(&settings, true);
+        let mut log_lines = vec![];
+        {
+            let pods = pods_lock.lock().await;
+            for pod in pods.items.iter() {
+                let mut lines = pod.get_previous_log_lines(&previous_lines_settings, &settings).await?;
+                log_lines.append(&mut lines);
+            }
+        }
+        log_lines.sort_by(|current, next| current.0.cmp(&next.0));
+        for line in log_lines {
+            display::print_log_line(&line.1, &settings, &pods_lock, &streams_lock, &line.2).await?;
+        }
+    }
+
     let loop_pause = settings.loop_pause;
     let mut no_pod_found = pod_cnt == 0;
     loop {

@@ -68,6 +68,91 @@ pub struct Settings {
     /// regex string to filter output that does not match
     #[arg(long, value_name = "inv_filter", default_value = "")]
     pub inv_filter: String,
+
+    /// regex string to replace pattern (pattern part)
+    #[arg(long, value_name = "pattern", default_value = "")]
+    pub replace_pattern: String,
+
+    /// string to replace the pattern captured (or not) by replace_pattern
+    /// check documentation if needed at https://docs.rs/regex/1.3.3/regex/struct.Regex.html#replacement-string-syntax
+    #[arg(long, value_name = "value", default_value = "")]
+    pub replace_value: String,
+}
+
+impl Settings {
+    pub fn to_validated(self) -> Result<SettingsValidated, Errors> {
+        let pod_search = Regex::new(self.pod_search.as_str()).map_err(|err| Errors::Validation(err.to_string()))?;
+        let kubeconfig = if self.kubeconfig == "".to_string() {
+            None
+        } else {
+            Some(PathBuf::from_str(self.kubeconfig.as_str()).map_err(|err| Errors::Other(err.to_string()))?)
+        };
+        let namespaces = self.namespaces.split(",").map(|s| s.to_string()).collect();
+        let hue_intervals = self.get_hue_intervals()?;
+        let color_saturation = Saturation {
+            value: self.color_saturation,
+        };
+        color_saturation.validate().map_err(|err| Errors::Validation(err.to_string()))?;
+        let color_lightness = Lightness { value: self.color_lightness };
+        color_lightness.validate().map_err(|err| Errors::Validation(err.to_string()))?;
+
+        let filter = if self.filter == "".to_string() {
+            None
+        } else {
+            Some(Regex::new(self.filter.as_str()).map_err(|err| Errors::Validation(err.to_string()))?)
+        };
+        let inv_filter = if self.inv_filter == "".to_string() {
+            None
+        } else {
+            Some(Regex::new(self.inv_filter.as_str()).map_err(|err| Errors::Validation(err.to_string()))?)
+        };
+
+        let replace = if self.replace_pattern.len() > 0 && self.replace_value.len() > 0 {
+            Some(Replace {
+                pattern: Regex::new(&self.replace_pattern).map_err(|err| Errors::Validation(err.to_string()))?,
+                value: self.replace_value,
+            })
+        } else {
+            None
+        };
+
+        return Ok(SettingsValidated {
+            pod_search,
+            kubeconfig,
+            namespaces: namespaces,
+            previous: self.previous,
+            since_seconds: self.since_seconds,
+            tail_lines: self.tail_lines,
+            timestamps: self.timestamps,
+            loop_pause: self.loop_pause,
+            hue_intervals,
+            color_saturation,
+            color_lightness,
+            filter,
+            inv_filter,
+            replace,
+        });
+    }
+
+    pub fn do_parse() -> Settings {
+        Settings::parse()
+    }
+
+    pub fn get_hue_intervals(&self) -> Result<Vec<HueInterval>, Errors> {
+        let mut intervals: Vec<HueInterval> = Vec::new();
+        for str_intervals in self.hue_intervals.split(",") {
+            let interval = HueInterval::from_str(str_intervals)?;
+            interval.clone().validate().map_err(|err| Errors::Validation(err.to_string()))?;
+            intervals.push(interval);
+        }
+        return Ok(intervals);
+    }
+}
+
+#[derive(Clone)]
+pub struct Replace {
+    pub pattern: Regex,
+    pub value: String,
 }
 
 #[derive(Clone)]
@@ -85,86 +170,11 @@ pub struct SettingsValidated {
     pub color_lightness: Lightness,
     pub filter: Option<Regex>,
     pub inv_filter: Option<Regex>,
+    pub replace: Option<Replace>,
 }
 
-impl Settings {
-    pub fn to_validated(self) -> Result<SettingsValidated, Errors> {
-        let pod_search = match Regex::new(self.pod_search.as_str()) {
-            Ok(val) => val,
-            Err(err) => return Err(Errors::Validation(err.to_string())),
-        };
-        let kubeconfig = if self.kubeconfig == "".to_string() {
-            None
-        } else {
-            Some(match PathBuf::from_str(self.kubeconfig.as_str()) {
-                Ok(val) => val,
-                Err(err) => return Err(Errors::Other(err.to_string())),
-            })
-        };
-        let namespaces = self.namespaces.split(",").map(|s| s.to_string()).collect();
-        let hue_intervals = self.get_hue_intervals()?;
-        let color_saturation = Saturation {
-            value: self.color_saturation,
-        };
-
-        match color_saturation.validate() {
-            Ok(val) => val,
-            Err(err) => return Err(Errors::Validation(err.to_string())),
-        };
-        let color_lightness = Lightness { value: self.color_lightness };
-        match color_lightness.validate() {
-            Ok(val) => val,
-            Err(err) => return Err(Errors::Validation(err.to_string())),
-        };
-
-        let filter = if self.filter == "".to_string() {
-            None
-        } else {
-            match Regex::new(self.filter.as_str()) {
-                Ok(val) => Some(val),
-                Err(err) => return Err(Errors::Validation(err.to_string())),
-            }
-        };
-        let inv_filter = if self.inv_filter == "".to_string() {
-            None
-        } else {
-            match Regex::new(self.inv_filter.as_str()) {
-                Ok(val) => Some(val),
-                Err(err) => return Err(Errors::Validation(err.to_string())),
-            }
-        };
-
-        return Ok(SettingsValidated {
-            pod_search,
-            kubeconfig,
-            namespaces: namespaces,
-            previous: self.previous,
-            since_seconds: self.since_seconds,
-            tail_lines: self.tail_lines,
-            timestamps: self.timestamps,
-            loop_pause: self.loop_pause,
-            hue_intervals,
-            color_saturation,
-            color_lightness,
-            filter,
-            inv_filter,
-        });
-    }
-
-    pub fn do_parse() -> Settings {
-        Settings::parse()
-    }
-
-    pub fn get_hue_intervals(&self) -> Result<Vec<HueInterval>, Errors> {
-        let mut intervals: Vec<HueInterval> = Vec::new();
-        for str_intervals in self.hue_intervals.split(",") {
-            let interval = HueInterval::from_str(str_intervals)?;
-            match interval.clone().validate() {
-                Ok(val) => val,
-                Err(err) => return Err(Errors::Validation(err.to_string())),
-            };
-            intervals.push(interval);
-        }
-        return Ok(intervals);
+impl SettingsValidated {
+    pub fn is_previous_lines(&self) -> bool {
+        return self.since_seconds.is_some() || self.tail_lines.is_some();
     }
 }

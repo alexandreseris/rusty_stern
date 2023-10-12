@@ -7,6 +7,8 @@ use termcolor::WriteColor;
 use validator::Validate;
 
 use crate::error::Errors;
+use crate::kubernetes_v2 as kubernetes;
+use crate::settings_v2 as settings;
 use crate::types;
 
 #[derive(Debug, Validate, Clone)]
@@ -18,10 +20,7 @@ pub struct Saturation {
 impl FromStr for Saturation {
     type Err = Errors;
     fn from_str(string: &str) -> Result<Self, Self::Err> {
-        let value = match string.parse::<u8>() {
-            Ok(val) => val,
-            Err(err) => return Err(Errors::Validation(err.to_string())),
-        };
+        let value = string.parse::<u8>().map_err(|err| Errors::Validation(err.to_string()))?;
         return Ok(Saturation { value });
     }
 }
@@ -35,10 +34,7 @@ pub struct Lightness {
 impl FromStr for Lightness {
     type Err = Errors;
     fn from_str(string: &str) -> Result<Self, Self::Err> {
-        let value = match string.parse::<u8>() {
-            Ok(val) => val,
-            Err(err) => return Err(Errors::Validation(err.to_string())),
-        };
+        let value = string.parse::<u8>().map_err(|err| Errors::Validation(err.to_string()))?;
         return Ok(Lightness { value });
     }
 }
@@ -52,15 +48,13 @@ pub struct Hue {
 impl FromStr for Hue {
     type Err = Errors;
     fn from_str(string: &str) -> Result<Self, Self::Err> {
-        let int_value = match string.parse::<u16>() {
-            Ok(val) => val,
-            Err(err) => return Err(Errors::Validation(format!("failled to parse {string}: {err}"))),
-        };
+        let int_value = string
+            .parse::<u16>()
+            .map_err(|err| Errors::Validation(format!("failled to parse {string}: {err}")))?;
         let hue = Hue { value: int_value };
-        return match hue.validate() {
-            Ok(_) => Ok(hue),
-            Err(err) => return Err(Errors::Validation(format!("failled to parse {string}: {err}"))),
-        };
+        hue.validate()
+            .map_err(|err| Errors::Validation(format!("failled to parse {string}: {err}")))?;
+        return Ok(hue);
     }
 }
 
@@ -257,36 +251,67 @@ pub async fn print_color(std: &mut termcolor::StandardStream, color_rgb: Option<
         None => termcolor::ColorSpec::default(),
     };
 
-    match std.set_color(&color_spec) {
-        Ok(_) => (),
-        Err(err) => return Err(Errors::StdErr(err.to_string())),
-    };
-
-    match std.write_fmt(format_args!("{message}")) {
-        Ok(val) => val,
-        Err(err) => return Err(Errors::StdErr(err.to_string())),
-    };
+    std.set_color(&color_spec).map_err(|err| Errors::StdErr(err.to_string()))?;
+    std.write_fmt(format_args!("{message}")).map_err(|err| Errors::StdErr(err.to_string()))?;
     Ok(())
 }
 
 #[allow(dead_code)]
 pub async fn reset_terminal_colors(stdout: &mut termcolor::StandardStream, stderr: &mut termcolor::StandardStream) -> Result<(), Errors> {
-    match stdout.set_color(&termcolor::ColorSpec::default()) {
-        Ok(_) => (),
-        Err(err) => return Err(Errors::StdErr(err.to_string())),
-    };
-    match stderr.set_color(&termcolor::ColorSpec::default()) {
-        Ok(_) => (),
-        Err(err) => return Err(Errors::StdErr(err.to_string())),
-    };
+    stdout
+        .set_color(&termcolor::ColorSpec::default())
+        .map_err(|err| Errors::StdErr(err.to_string()))?;
+    stderr
+        .set_color(&termcolor::ColorSpec::default())
+        .map_err(|err| Errors::StdErr(err.to_string()))?;
 
-    match stdout.write_fmt(format_args!("bye")) {
-        Ok(val) => val,
-        Err(err) => return Err(Errors::StdErr(err.to_string())),
-    };
-    match stderr.write_fmt(format_args!("bye")) {
-        Ok(val) => val,
-        Err(err) => return Err(Errors::StdErr(err.to_string())),
-    };
+    stdout.write_fmt(format_args!("bye")).map_err(|err| Errors::StdErr(err.to_string()))?;
+    stderr.write_fmt(format_args!("bye")).map_err(|err| Errors::StdErr(err.to_string()))?;
     Ok(())
+}
+
+pub async fn print_log_line(
+    line: &String,
+    settings: &settings::SettingsValidated,
+    pods: &types::ArcMutex<kubernetes::Pods>,
+    streams: &types::ArcMutex<Streams>,
+    pod: &kubernetes::Pod,
+) -> Result<(), Errors> {
+    let mut line = line.clone();
+    if let Some(reg) = &settings.filter {
+        if !reg.is_match(&line) {
+            return Ok(());
+        }
+    }
+    if let Some(reg) = &settings.inv_filter {
+        if reg.is_match(&line) {
+            return Ok(());
+        }
+    }
+    if let Some(replace) = &settings.replace {
+        line = replace.pattern.replace_all(&line, &replace.value).to_string();
+    }
+    let padding_cnt;
+    let namespace: String;
+    {
+        let pods = pods.lock().await;
+        namespace = match pods.print_namespace {
+            true => {
+                padding_cnt = pods.padding - pod.name.len() - pod.namespace.name.len() + 1;
+                format!("{}/", pod.namespace.name)
+            }
+            false => {
+                padding_cnt = pods.padding - pod.name.len();
+                "".to_string()
+            }
+        };
+    }
+    let padding_str = " ".repeat(padding_cnt);
+    let message = format!("{namespace}{}:{padding_str} {line}", &pod.name);
+    {
+        let mut streams = streams.lock().await;
+        let stdout = &mut streams.out;
+        print_color(stdout, Some(pod.color), message).await?;
+    }
+    return Ok(());
 }

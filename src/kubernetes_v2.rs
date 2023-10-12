@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use chrono::{DateTime, FixedOffset};
 use colors_transform::Rgb;
 use futures::{AsyncBufReadExt, TryStreamExt};
 use k8s_openapi::api::core::v1::Pod as ApiPod;
@@ -12,10 +13,7 @@ use crate::error::Errors;
 use crate::{display_v2 as display, settings_v2 as settings, types};
 
 fn get_pod_name(pod: &ApiPod) -> String {
-    return match &pod.metadata.name {
-        Some(name) => name.clone(),
-        None => "NO_NAME".to_string(),
-    };
+    return pod.metadata.name.clone().unwrap_or("NO_NAME".to_string());
 }
 
 #[derive(Clone)]
@@ -45,15 +43,12 @@ impl Namespaces {
     pub async fn get_pods_cnt(&self, search: &Regex) -> Result<usize, Errors> {
         let mut cnt: usize = 0;
         for namespace in self.items.iter() {
-            let pod_list = match namespace.api.list(&ListParams::default()).await {
-                Ok(pod_list) => pod_list,
-                Err(err) => {
-                    return Err(Errors::Kubernetes(
-                        format!("get pods list on namespace {}", namespace.name),
-                        err.to_string(),
-                    ))
-                }
-            };
+            let pod_list = namespace
+                .api
+                .list(&ListParams::default())
+                .await
+                .map_err(|err| Errors::Kubernetes(format!("get pods list on namespace {}", namespace.name), err.to_string()))?;
+
             for pod in pod_list {
                 let name = get_pod_name(&pod);
                 if search.is_match(name.as_str()) {
@@ -97,17 +92,6 @@ pub fn is_pod_running(pod: &ApiPod) -> bool {
 }
 
 impl Pod {
-    #[allow(dead_code)]
-    pub async fn refresh(&mut self) -> Result<(), Errors> {
-        self.pod_api = self
-            .namespace
-            .api
-            .get(&self.name)
-            .await
-            .map_err(|err| Errors::Kubernetes("refresh pod".to_string(), err.to_string()))?;
-        return Ok(());
-    }
-
     pub fn is_running(&self) -> bool {
         return is_pod_running(&self.pod_api);
     }
@@ -119,50 +103,44 @@ impl Pod {
         pods: types::ArcMutex<Pods>,
         streams: types::ArcMutex<display::Streams>,
     ) -> Result<(), Errors> {
-        let mut stream = match self.namespace.api.log_stream(&self.name, &log_params).await {
-            Ok(stream) => stream.lines(),
-            Err(err) => {
-                let mut pods = pods.lock().await;
-                pods.remove_pod(self).await;
-                pods.colors.set_color_to_unused(self.color);
-                return Err(Errors::LogError(err.to_string()));
-            }
-        };
+        let mut stream = self
+            .namespace
+            .api
+            .log_stream(&self.name, &log_params)
+            .await
+            .map_err(|err| Errors::LogError(err.to_string()))?
+            .lines();
         while let Some(line) = stream.try_next().await.map_err(|err| Errors::LogError(err.to_string()))? {
-            if let Some(reg) = &settings.filter {
-                if !reg.is_match(&line) {
-                    continue;
-                }
-            }
-            if let Some(reg) = &settings.inv_filter {
-                if reg.is_match(&line) {
-                    continue;
-                }
-            }
-            let padding_cnt;
-            let namespace: String;
-            {
-                let pods = pods.lock().await;
-                namespace = match pods.print_namespace {
-                    true => {
-                        padding_cnt = pods.padding - self.name.len() - self.namespace.name.len() + 1;
-                        format!("{}/", self.namespace.name)
-                    }
-                    false => {
-                        padding_cnt = pods.padding - self.name.len();
-                        "".to_string()
-                    }
-                };
-            }
-            let padding_str = " ".repeat(padding_cnt);
-            let message = format!("{namespace}{}:{padding_str} {line}", &self.name);
-            {
-                let mut streams = streams.lock().await;
-                let stdout = &mut streams.out;
-                display::print_color(stdout, Some(self.color), message).await?;
-            }
+            display::print_log_line(&line, &settings, &pods, &streams, self).await?;
         }
         return Ok(());
+    }
+
+    pub async fn get_previous_log_lines(
+        &self,
+        log_param: &kube::api::LogParams,
+        settings: &settings::SettingsValidated,
+    ) -> Result<Vec<(DateTime<FixedOffset>, String, Pod)>, Errors> {
+        let mut lines = vec![];
+        for mut pod_log_line_splited in self
+            .namespace
+            .api
+            .logs(&self.name, &log_param)
+            .await
+            .map_err(|err| Errors::Kubernetes("getting log sync".to_string(), err.to_string()))?
+            .split("\n")
+            .filter(|line| line.len() != 0)
+            .map(|line| line.split(" "))
+        {
+            let date_str = pod_log_line_splited.next().ok_or(Errors::LogError("failled to split line".to_string()))?;
+            let mut line = pod_log_line_splited.next().ok_or(Errors::LogError("failled to split line".to_string()))?;
+            if !settings.timestamps {
+                line = &line[date_str.len() + 1..];
+            }
+            let date = chrono::DateTime::parse_from_rfc3339(date_str).map_err(|err| Errors::LogError(err.to_string()))?;
+            lines.push((date, line.to_string(), self.clone()));
+        }
+        return Ok(lines);
     }
 }
 
@@ -203,15 +181,12 @@ impl Pods {
         let mut pod_list = vec![];
         let pods_mut: &mut Vec<Pod> = pod_list.as_mut();
         for namespace in namespaces.clone().items {
-            let pod_list = match namespace.api.list(&ListParams::default()).await {
-                Ok(pod_list) => pod_list,
-                Err(err) => {
-                    return Err(Errors::Kubernetes(
-                        format!("get pods list on namespace {}", namespace.name),
-                        err.to_string(),
-                    ))
-                }
-            };
+            let pod_list = namespace
+                .api
+                .list(&ListParams::default())
+                .await
+                .map_err(|err| Errors::Kubernetes(format!("get pods list on namespace {}", namespace.name), err.to_string()))?;
+
             for pod in pod_list {
                 let name = get_pod_name(&pod);
                 if pod_search.is_match(name.as_str()) && is_pod_running(&pod) {
@@ -260,15 +235,12 @@ impl Pods {
     pub async fn refresh(&mut self) -> Result<(), Errors> {
         let mut found_one = false;
         for namespace in self.namespaces.items.iter() {
-            let pod_list = match namespace.api.list(&ListParams::default()).await {
-                Ok(pod_list) => pod_list,
-                Err(err) => {
-                    return Err(Errors::Kubernetes(
-                        format!("get pods list on namespace {}", namespace.name),
-                        err.to_string(),
-                    ))
-                }
-            };
+            let pod_list = namespace
+                .api
+                .list(&ListParams::default())
+                .await
+                .map_err(|err| Errors::Kubernetes(format!("get pods list on namespace {}", namespace.name), err.to_string()))?;
+
             for pod in pod_list {
                 let name = get_pod_name(&pod);
                 if self.pod_search.is_match(name.as_str()) && is_pod_running(&pod) && !self.pod_already_exists(&name, namespace) {
@@ -289,45 +261,50 @@ impl Pods {
     }
 }
 
-pub fn new_log_param(settings: &crate::settings_v2::SettingsValidated) -> kube::api::LogParams {
-    return kube::api::LogParams {
-        container: None,
-        limit_bytes: None,
-        pretty: false,
-        follow: true,
-        previous: settings.previous,
-        timestamps: settings.timestamps,
-        since_seconds: settings.since_seconds,
-        tail_lines: settings.tail_lines,
+pub fn new_log_param(settings: &settings::SettingsValidated, previous_line_set: bool) -> kube::api::LogParams {
+    return if previous_line_set {
+        kube::api::LogParams {
+            container: None,
+            limit_bytes: None,
+            pretty: false,
+            previous: settings.previous,
+            follow: false,
+            timestamps: true,
+            since_seconds: settings.since_seconds,
+            tail_lines: settings.tail_lines,
+        }
+    } else {
+        kube::api::LogParams {
+            container: None,
+            limit_bytes: None,
+            pretty: false,
+            previous: settings.previous,
+            follow: true,
+            timestamps: settings.timestamps,
+            since_seconds: Some(0),
+            tail_lines: Some(0),
+        }
     };
 }
 
 pub async fn new_client(settings: &crate::settings_v2::SettingsValidated) -> Result<Client, Errors> {
     let mut conf = match &settings.kubeconfig {
         Some(val) => {
-            let kconf = match Kubeconfig::read_from(val) {
-                Ok(val) => val,
-                Err(err) => return Err(Errors::Kubernetes("reading config file".to_string(), err.to_string())),
-            };
+            let kconf = Kubeconfig::read_from(val).map_err(|err| Errors::Kubernetes("reading config file".to_string(), err.to_string()))?;
             let kconfopt = &KubeConfigOptions::default();
-            match Config::from_custom_kubeconfig(kconf, kconfopt).await {
-                Ok(val) => val,
-                Err(err) => return Err(Errors::Kubernetes("parsing config file".to_string(), err.to_string())),
-            }
+            Config::from_custom_kubeconfig(kconf, kconfopt)
+                .await
+                .map_err(|err| Errors::Kubernetes("parsing config file".to_string(), err.to_string()))?
         }
-        None => match Config::infer().await {
-            Ok(val) => val,
-            Err(err) => return Err(Errors::Kubernetes("getting default config".to_string(), err.to_string())),
-        },
+        None => Config::infer()
+            .await
+            .map_err(|err| Errors::Kubernetes("getting default config".to_string(), err.to_string()))?,
     };
     conf.read_timeout = None;
     conf.write_timeout = None;
     conf.connect_timeout = None;
 
-    let client = match Client::try_from(conf) {
-        Ok(val) => val,
-        Err(err) => return Err(Errors::Kubernetes("using kubernetes configuration".to_string(), err.to_string())),
-    };
+    let client = Client::try_from(conf).map_err(|err| Errors::Kubernetes("using kubernetes configuration".to_string(), err.to_string()))?;
     return Ok(client);
 }
 
