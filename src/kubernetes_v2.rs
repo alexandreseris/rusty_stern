@@ -281,7 +281,7 @@ pub fn new_log_param(settings: &settings::SettingsValidated, previous_line_set: 
             previous: settings.previous,
             follow: true,
             timestamps: settings.timestamps,
-            since_seconds: Some(0),
+            since_seconds: None,
             tail_lines: Some(0),
         }
     };
