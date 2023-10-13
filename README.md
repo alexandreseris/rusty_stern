@@ -55,7 +55,7 @@ rustup target add targetname --toolchain nightly
 
 # build dependencies
 ## Linux
-apt install libssl-dev
+apt install libssl-dev build-essential
 ## Windows (using powershell)
 # install https://github.com/microsoft/vcpkg (check readme)
 vcpkg install openssl --triplet=x64-windows-static
