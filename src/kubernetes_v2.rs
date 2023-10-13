@@ -122,7 +122,7 @@ impl Pod {
         settings: &settings::SettingsValidated,
     ) -> Result<Vec<(DateTime<FixedOffset>, String, Pod)>, Errors> {
         let mut lines = vec![];
-        for mut pod_log_line_splited in self
+        for raw_line in self
             .namespace
             .api
             .logs(&self.name, &log_param)
@@ -130,10 +130,9 @@ impl Pod {
             .map_err(|err| Errors::Kubernetes("getting log sync".to_string(), err.to_string()))?
             .split("\n")
             .filter(|line| line.len() != 0)
-            .map(|line| line.split(" "))
         {
-            let date_str = pod_log_line_splited.next().ok_or(Errors::LogError("failled to split line".to_string()))?;
-            let mut line = pod_log_line_splited.next().ok_or(Errors::LogError("failled to split line".to_string()))?;
+            let date_str = raw_line.split(" ").next().ok_or(Errors::LogError("failled to split line".to_string()))?;
+            let mut line = raw_line;
             if !settings.timestamps {
                 line = &line[date_str.len() + 1..];
             }

@@ -8,7 +8,10 @@ use crate::display_v2 as display;
 use crate::error::Errors;
 use crate::kubernetes_v2 as kubernetes;
 use crate::settings_v2 as settings;
+use chrono::DateTime;
+use chrono::FixedOffset;
 use tokio;
+use tokio::task::JoinHandle;
 
 #[tokio::main]
 async fn main() -> Result<(), Errors> {
@@ -44,9 +47,19 @@ async fn main() -> Result<(), Errors> {
         let mut log_lines = vec![];
         {
             let pods = pods_lock.lock().await;
+            let mut tasks = vec![];
             for pod in pods.items.iter() {
-                let mut lines = pod.get_previous_log_lines(&previous_lines_settings, &settings).await?;
-                log_lines.append(&mut lines);
+                let pod = pod.clone();
+                let previous_lines_settings = previous_lines_settings.clone();
+                let settings = settings.clone();
+                let task: JoinHandle<Result<Vec<(DateTime<FixedOffset>, String, kubernetes::Pod)>, Errors>> = tokio::spawn(async move {
+                    return pod.get_previous_log_lines(&previous_lines_settings, &settings).await;
+                });
+                tasks.push(task);
+            }
+            for task in tasks {
+                let mut task_res = task.await.map_err(|err| Errors::Other(err.to_string()))??;
+                log_lines.append(&mut task_res);
             }
         }
         log_lines.sort_by(|current, next| current.0.cmp(&next.0));
