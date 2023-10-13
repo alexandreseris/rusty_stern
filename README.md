@@ -37,6 +37,8 @@ Options:
 
 ## Build
 
+build with rustc 1.74.0-nightly
+
 ```sh
 # add nightly toolchain
 rustup toolchain install nightly
@@ -64,4 +66,5 @@ $env:OPENSSL_DIR = "$vcpkgloc\installed\x64-windows-static"
 cargo +nightly build --bin rusty_stern --release --target x86_64-unknown-linux-gnu
 # build for windows 64
 cargo +nightly build --bin rusty_stern --release --target x86_64-pc-windows-msvc
+# you'll find builds in ./target/$target_name/release/rusty_stern[.exe]
 ```
