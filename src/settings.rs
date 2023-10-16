@@ -8,7 +8,7 @@ use regex::Regex;
 use validator::Validate;
 
 use crate::{
-    display_v2::{HueInterval, Lightness, Saturation},
+    display::{HueInterval, Lightness, Saturation},
     error::Errors,
 };
 
@@ -23,8 +23,8 @@ pub struct Settings {
     #[arg(short, long, value_name = "filepath", default_value = "")]
     pub kubeconfig: String,
 
-    /// kubernetes namespaces to use separated by commas.
-    #[arg(short, long, value_name = "nmspc", default_value = "default")]
+    /// kubernetes namespaces to use separated by commas. default uses namespace defined in yout config file
+    #[arg(short, long, value_name = "nmspc", default_value = "")]
     pub namespaces: String,
 
     /// retrieve previous terminated container logs
@@ -87,7 +87,11 @@ impl Settings {
         } else {
             Some(PathBuf::from_str(self.kubeconfig.as_str()).map_err(|err| Errors::Other(err.to_string()))?)
         };
-        let namespaces = self.namespaces.split(",").map(|s| s.to_string()).collect();
+        let namespaces = if self.namespaces == "" {
+            vec![]
+        } else {
+            self.namespaces.split(",").map(|s| s.to_string()).collect()
+        };
         let hue_intervals = self.get_hue_intervals()?;
         let color_saturation = Saturation {
             value: self.color_saturation,

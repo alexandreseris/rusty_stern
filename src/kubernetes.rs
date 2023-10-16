@@ -10,7 +10,7 @@ use kube::{Api, Client, Config};
 use regex::Regex;
 
 use crate::error::Errors;
-use crate::{display_v2 as display, settings_v2 as settings, types};
+use crate::{display, settings, types};
 
 fn get_pod_name(pod: &ApiPod) -> String {
     return pod.metadata.name.clone().unwrap_or("NO_NAME".to_string());
@@ -31,11 +31,19 @@ impl Namespaces {
     pub fn new(client: &kube::Client, namespaces_names: &Vec<String>) -> Namespaces {
         let mut namespaces: Vec<Namespace> = vec![];
         let namespaces_mut: &mut Vec<Namespace> = namespaces.as_mut();
-        for namespace in namespaces_names {
+        if namespaces_names.len() == 0 {
+            let default_namespace = client.default_namespace();
             namespaces_mut.push(Namespace {
-                name: namespace.clone(),
-                api: Api::namespaced(client.clone(), &namespace.clone()),
+                name: default_namespace.to_string(),
+                api: Api::namespaced(client.clone(), &default_namespace),
             });
+        } else {
+            for namespace in namespaces_names {
+                namespaces_mut.push(Namespace {
+                    name: namespace.clone(),
+                    api: Api::namespaced(client.clone(), &namespace.clone()),
+                });
+            }
         }
         return Namespaces { items: namespaces };
     }
@@ -286,7 +294,7 @@ pub fn new_log_param(settings: &settings::SettingsValidated, previous_line_set: 
     };
 }
 
-pub async fn new_client(settings: &crate::settings_v2::SettingsValidated) -> Result<Client, Errors> {
+pub async fn new_client(settings: &crate::settings::SettingsValidated) -> Result<Client, Errors> {
     let mut conf = match &settings.kubeconfig {
         Some(val) => {
             let kconf = Kubeconfig::read_from(val).map_err(|err| Errors::Kubernetes("reading config file".to_string(), err.to_string()))?;

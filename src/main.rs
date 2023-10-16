@@ -1,13 +1,10 @@
-mod display_v2;
+mod display;
 mod error;
-mod kubernetes_v2;
-mod settings_v2;
+mod kubernetes;
+mod settings;
 mod types;
 
-use crate::display_v2 as display;
 use crate::error::Errors;
-use crate::kubernetes_v2 as kubernetes;
-use crate::settings_v2 as settings;
 use chrono::DateTime;
 use chrono::FixedOffset;
 use tokio;
@@ -15,7 +12,7 @@ use tokio::task::JoinHandle;
 
 #[tokio::main]
 async fn main() -> Result<(), Errors> {
-    let streams: display_v2::Streams = display::new_streams();
+    let streams: display::Streams = display::new_streams();
     let streams_lock = display::new_streams_mutex(streams);
 
     let settings = settings::Settings::do_parse();

@@ -18,7 +18,7 @@ Usage: rusty_stern.exe [OPTIONS]
 Options:
   -p, --pod-search <reg pattern>   regex to match pod names [default: .+]
   -k, --kubeconfig <filepath>      path to the kubeconfig file. if the option is not passed, try to infer configuration [default: ]
-  -n, --namespaces <nmspc>         kubernetes namespaces to use separated by commas [default: default]
+  -n, --namespaces <nmspc>         kubernetes namespaces to use separated by commas. default uses namespace defined in yout config file [default: ]
       --previous                   retrieve previous terminated container logs
       --since-seconds <seconds>    a relative time in seconds before the current time from which to show logs
       --tail-lines <line_cnt>      number of lines from the end of the logs to show

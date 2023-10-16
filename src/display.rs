@@ -7,8 +7,8 @@ use termcolor::WriteColor;
 use validator::Validate;
 
 use crate::error::Errors;
-use crate::kubernetes_v2 as kubernetes;
-use crate::settings_v2 as settings;
+use crate::kubernetes;
+use crate::settings;
 use crate::types;
 
 #[derive(Debug, Validate, Clone)]
@@ -133,7 +133,7 @@ struct ColorGeneratorState {
 }
 
 impl ColorParams {
-    pub fn new(settings: &crate::settings_v2::SettingsValidated, pod_cnt: usize) -> ColorParams {
+    pub fn new(settings: &crate::settings::SettingsValidated, pod_cnt: usize) -> ColorParams {
         let mut hue_values = vec![];
         for interval in settings.hue_intervals.iter() {
             for val in interval.start.value..interval.end.value + 1 {
